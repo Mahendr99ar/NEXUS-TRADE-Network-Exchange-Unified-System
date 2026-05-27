@@ -164,8 +164,5 @@ This is identical to how NSE's NEAT system processes orders.
 ## Author
 
 **Mahendra Meena**
-B.Tech EEE, IIIT Gwalior (2023–2027)
-[LinkedIn](https://linkedin.com) | [GitHub](https://github.com)
+[LinkedIn](https://linkedin.com) 
 
-*NK Securities Quant Hackathon 2025 — Top 6% (356/6000+)*
-*Summer of Quant 2025, IIT Kharagpur*
