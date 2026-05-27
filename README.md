@@ -1,101 +1,96 @@
-# QUANT-ME — Order Matching Engine
+# NEXUS-TRADE — Order Matching Engine
 
-> A high-performance, in-memory order matching engine built from scratch in Python,
-> replicating the core infrastructure of NSE/BSE trading systems.
+> Built from scratch in Python. No libraries for the core logic — just raw data structures doing exactly what NSE's NEAT system does under the hood.
 
-**By Mahendra Meena | IIIT Gwalior | B.Tech EEE 2027**
+**Mahendra Meena | IIIT Gwalior | B.Tech EEE 2027**
 
 ---
 
-## Benchmark Results
+I got curious about how stock exchanges actually work — not the trading part, but the infrastructure. What happens in the milliseconds between you clicking "Buy" and the order getting filled? That curiosity turned into this project.
+
+Turns out it's a very interesting DSA problem.
+
+---
+
+## Numbers
 
 | Metric | Value |
 |--------|-------|
-| Throughput | **74,168 orders/sec** |
-| Median Latency (P50) | **9.5 µs** |
-| P99 Latency | **43.3 µs** |
-| Trades Matched (10K test) | **9,819 / 10,100** |
-| Fill Rate | **97.2%** |
+| Throughput | 74,168 orders/sec |
+| P50 Latency | 9.5 µs |
+| P99 Latency | 43.3 µs |
+| Fill Rate | 97.2% (9,819 / 10,100 trades on 10K test) |
+
+Running on a regular laptop. No async tricks, no multiprocessing — just the right data structures chosen for the right reasons.
 
 ---
 
-## What This Does
+## What it does
 
-QUANT-ME is a **Price-Time Priority** order matching engine — the same algorithm
-used by every major stock exchange (NSE, BSE, NYSE). It:
+NEXUS-TRADE implements **Price-Time Priority matching** — the same algorithm every major exchange (NSE, BSE, NYSE) runs. You submit a BUY or SELL order, and the engine:
 
-- Accepts **LIMIT** and **MARKET** orders
-- Matches buyer and seller orders in real time
-- Maintains a live **two-sided order book** (bids + asks)
-- Supports **O(1) order cancellation**
-- Computes real-time **quant analytics** (VWAP, Realized Volatility, Z-score, Order Imbalance)
+1. Checks if there's a matching order on the other side
+2. Fills as much as possible, FIFO within each price level
+3. Parks whatever's left as a resting limit order
+4. Logs the trade and updates analytics in real time
+
+Supports LIMIT and MARKET orders, live two-sided order book, O(1) cancellation, and a quant analytics layer on top (VWAP, Realized Vol, Z-score, Order Imbalance).
 
 ---
 
-## Data Structures Used
+## Why these data structures
+
+This was the actual interesting part to figure out.
 
 ```
 Order Book
-├── Bids  → SortedDict (Red-Black Tree) — O(log n) insert/lookup, max-first
-│   └── Each price level → deque (Doubly Linked List) — O(1) FIFO matching
-└── Asks  → SortedDict (Red-Black Tree) — O(log n) insert/lookup, min-first
-    └── Each price level → deque (Doubly Linked List) — O(1) FIFO matching
+├── Bids  → SortedDict (Red-Black Tree) — max-first, O(log n)
+│   └── Each price level → deque — O(1) FIFO matching
+└── Asks  → SortedDict (Red-Black Tree) — min-first, O(log n)
+    └── Each price level → deque — O(1) FIFO matching
 
-Order Map   → dict (HashMap)      — O(1) cancel by order ID
-Trade Log   → deque(maxlen=1000)  — Circular buffer, O(1) append
+Order Map → dict (HashMap) — O(1) cancel by order ID
+Trade Log → deque(maxlen=1000) — circular buffer
 ```
 
-| Operation | Data Structure | Time Complexity |
-|-----------|---------------|-----------------|
+The exchange needs to answer "what's the best bid/ask right now?" millions of times per second. A plain list would be O(n) for both insert and lookup. A Red-Black Tree gives O(log n) — for 10,000 price levels that's the difference between 10,000 operations and 14.
+
+Cancel rates in live trading can be 90%+ of all messages. O(n) cancel (scanning every price level) would kill throughput. The HashMap gives O(1) — direct jump to the order, done.
+
+See [`docs/architecture.md`](docs/architecture.md) for the full breakdown with pseudocode.
+
+| Operation | Structure | Complexity |
+|-----------|-----------|------------|
 | Insert order | Red-Black Tree | O(log n) |
-| Match order | Doubly Linked List | O(1) per fill |
+| Match order | Deque (FIFO) | O(1) per fill |
 | Cancel order | HashMap | O(1) |
-| Best bid/ask | Red-Black Tree peek | O(log n) |
-| Trade log append | Circular Buffer | O(1) |
+| Best bid/ask | RB-Tree peek | O(log n) |
+| Trade log | Circular Buffer | O(1) |
 
 ---
 
-## Project Structure
-
-```
-quant-me/
-├── src/
-│   └── order_matching_engine.py   # Core engine (all-in-one)
-├── tests/
-│   └── test_engine.py             # Unit tests (pytest)
-├── docs/
-│   └── architecture.md            # Deep-dive design doc
-├── requirements.txt
-├── .gitignore
-└── README.md
-```
-
----
-
-## Quick Start
+## Running it
 
 ```bash
-# 1. Clone
-git clone https://github.com/YOUR_USERNAME/quant-me.git
-cd quant-me
+git clone https://github.com/Mahendr99ar/NEXUS-TRADE-Network-Exchange-Unified-System.git
+cd NEXUS-TRADE-Network-Exchange-Unified-System
 
-# 2. Install dependencies
 pip install -r requirements.txt
 
-# 3. Run live demo
+# Live demo
 python src/order_matching_engine.py
 
-# 4. Run tests
+# Tests
 pytest tests/ -v
 ```
 
 ---
 
-## Live Demo Output
+## Sample output
 
 ```
 ════════════════════════════════════════════
-  QUANT-ME ORDER MATCHING ENGINE — LIVE DEMO
+  NEXUS-TRADE ORDER MATCHING ENGINE — LIVE DEMO
   By Mahendra Meena | IIIT Gwalior
 ════════════════════════════════════════════
   [Engine] Symbol added: NIFTY50
@@ -113,56 +108,43 @@ pytest tests/ -v
 
 ---
 
-## Quant Analytics Module
+## Analytics layer
 
-Built on top of my **Pairs Trading** (Sharpe: 1.8) and **NIFTY Volatility Prediction** work:
+The signals here connect directly to earlier work I did on Pairs Trading (Sharpe: 1.8) and NIFTY Volatility Prediction:
 
-| Signal | Formula | Use Case |
-|--------|---------|----------|
-| VWAP | Σ(price × vol) / Σvol | Execution benchmark |
-| Realized Volatility | std(log returns) × √252 | Risk estimation |
-| Z-score | (price − mean) / std | Mean-reversion signal |
-| Order Imbalance | (bidQty − askQty) / total | Short-term price predictor |
+| Signal | Formula | Why it matters |
+|--------|---------|----------------|
+| VWAP | Σ(price × vol) / Σvol | Standard execution benchmark for institutions |
+| Realized Volatility | std(log returns) × √252 | Same computation as Black-Scholes sigma input |
+| Z-score | (price − mean) / std | Mean-reversion trigger — same signal from the pairs trading work |
+| Order Imbalance | (bidQty − askQty) / total | Predicts next ~10s price direction at ~60-65% accuracy (per academic literature) |
 
 ---
 
-## Algorithm — Price-Time Priority
+## Project structure
 
 ```
-Incoming BUY order at price P:
-  1. Check best ask price (O(log n) — Red-Black Tree peek)
-  2. If best_ask <= P:
-       Fill from front of ask queue (O(1) — FIFO deque)
-       Repeat until order filled OR no more matching asks
-  3. Remaining qty → resting limit order added to bid book
+NEXUS-TRADE/
+├── src/
+│   └── order_matching_engine.py   # core engine
+├── tests/
+│   └── test_engine.py             # pytest suite
+├── docs/
+│   └── architecture.md            # detailed design notes
+├── requirements.txt
+└── README.md
 ```
 
-This is identical to how NSE's NEAT system processes orders.
-
 ---
 
-## Skills Demonstrated
+## What's next
 
-- **DSA**: Red-Black Tree, Doubly Linked List, HashMap, Circular Buffer
-- **OOP**: Abstract base classes, Observer pattern, Dataclasses
-- **OS**: Concurrent-safe design, nanosecond timing with `perf_counter_ns`
-- **Quant Finance**: VWAP, Realized Vol, Z-score, Order Book Imbalance
-- **System Design**: Separation of concerns, callback/observer architecture
-
----
-
-## Roadmap
-
-- [ ] WebSocket API (FastAPI) for live order submission
+- [ ] WebSocket API via FastAPI — so you can actually submit orders over a connection
 - [ ] Multi-symbol support (BANKNIFTY, RELIANCE, etc.)
-- [ ] C++ port for sub-microsecond latency
-- [ ] FIX protocol message parsing
-- [ ] Persistent order log with SQLite
+- [ ] C++ port — Python gets you to ~75K orders/sec, C++ should hit sub-microsecond
+- [ ] FIX protocol parsing
+- [ ] SQLite persistence for the order log
 
 ---
 
-## Author
-
-**Mahendra Meena**
-[LinkedIn](https://linkedin.com) 
-
+**Mahendra Meena** — [LinkedIn](https://www.linkedin.com/in/mahendra-meena-b17609291/)
