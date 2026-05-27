@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   QUANT-ME: Order Matching Engine                            ║
+║   NEXUS-TRADE: Order Matching Engine                            ║
 ║   By: Mahendra Meena | IIIT Gwalior                          ║
 ║   Run: python order_matching_engine.py                       ║
 ╚══════════════════════════════════════════════════════════════╝
@@ -493,7 +493,7 @@ def run_benchmark():
 
 def run_demo():
     print("\n" + "═"*52)
-    print("  QUANT-ME ORDER MATCHING ENGINE — LIVE DEMO")
+    print("  NEXUS-TRADE ORDER MATCHING ENGINE — LIVE DEMO")
     print("  By Mahendra Meena | IIIT Gwalior")
     print("═"*52)
 
