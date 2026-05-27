@@ -147,4 +147,4 @@ NEXUS-TRADE/
 
 ---
 
-**Mahendra Meena** — [LinkedIn]([https://www.linkedin.com/in/mahendra-meena-b17609291/](https://www.linkedin.com/in/mahendra-meena-72047b201/?lipi=urn%3Ali%3Apage%3Ad_flagship3_profile_view_base_contact_details%3Bi4z3HXTbQyO2L8xy9tLMYw%3D%3D)
+**Mahendra Meena** — [LinkedIn](https://www.linkedin.com/in/mahendra-meena-72047b201/?lipi=urn%3Ali%3Apage%3Ad_flagship3_profile_view_base_contact_details%3Bi4z3HXTbQyO2L8xy9tLMYw%3D%3D)
