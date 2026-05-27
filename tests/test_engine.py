@@ -1,5 +1,5 @@
 """
-Unit Tests — QUANT-ME Order Matching Engine
+Unit Tests — NEXUS-TRADE: Order Matching Engine
 Run: pytest tests/ -v
 """
 
