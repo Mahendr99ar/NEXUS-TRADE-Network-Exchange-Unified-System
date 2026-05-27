@@ -1,6 +1,6 @@
 """
 ╔══════════════════════════════════════════════════════════════╗
-║   NEXUS-TRADE: Order Matching Engine                            ║
+║   NEXUS-TRADE: Order Matching Engine                         ║
 ║   By: Mahendra Meena | IIIT Gwalior                          ║
 ║   Run: python order_matching_engine.py                       ║
 ╚══════════════════════════════════════════════════════════════╝
