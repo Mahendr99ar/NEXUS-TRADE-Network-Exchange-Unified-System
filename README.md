@@ -96,9 +96,9 @@ pytest tests/ -v
 ════════════════════════════════════════════
   [Engine] Symbol added: NIFTY50
  
-  ✅ TRADE #001 | 95 @ 24500.50 | ID: CAA68D6F
-  ✅ TRADE #002 | 105 @ 24501.00 | ID: 6A600B80
-  ✅ TRADE #003 | 60 @ 24499.50 | ID: B75FB6AC
+  TRADE #001 | 95 @ 24500.50 | ID: CAA68D6F
+  TRADE #002 | 105 @ 24501.00 | ID: 6A600B80
+  TRADE #003 | 60 @ 24499.50 | ID: B75FB6AC
  
   VWAP: 24500.47   RealizedVol: 1.28%   Z-score: 0.000   Imbalance: 0.846
  
