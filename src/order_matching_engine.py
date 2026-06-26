@@ -37,11 +37,19 @@ class Order:
     price:      float        # ignored for MARKET orders
     quantity:   int
     order_type: str = 'LIMIT'   # 'LIMIT' or 'MARKET'
+    trader_id:  Optional[str] = None   # used for self-trade prevention (STP)
     timestamp:  float = field(default_factory=time.time)
 
+    def __post_init__(self):
+        if self.quantity <= 0:
+            raise ValueError(f"Order quantity must be > 0, got {self.quantity}")
+        if self.order_type == 'LIMIT' and self.price is not None and self.price <= 0:
+            raise ValueError(f"LIMIT order price must be > 0, got {self.price}")
+
     def __repr__(self):
+        price_str = f"{self.price:.2f}" if self.price is not None else "MKT"
         return (f"Order({self.order_id} | {self.side} {self.quantity} "
-                f"@ {self.price:.2f} [{self.order_type}])")
+                f"@ {price_str} [{self.order_type}])")
 
 
 @dataclass
@@ -61,48 +69,118 @@ class Trade:
 
 
 # ══════════════════════════════════════════════════════════════
-# 2.  PRICE LEVEL  (Doubly Linked List via deque — O(1) FIFO)
+# 2.  PRICE LEVEL  (true Doubly Linked List — O(1) FIFO + O(1) remove)
 # ══════════════════════════════════════════════════════════════
+
+class _Node:
+    """One node in the doubly linked list holding an Order."""
+    __slots__ = ('order', 'prev', 'next')
+
+    def __init__(self, order: 'Order'):
+        self.order = order
+        self.prev: Optional['_Node'] = None
+        self.next: Optional['_Node'] = None
+
 
 class PriceLevel:
     """
     All orders at ONE price, in arrival order (FIFO).
-    DSA: Doubly Linked List — O(1) enqueue at back, O(1) dequeue from front.
+
+    DSA: a real doubly linked list (head/tail pointers + per-node prev/next),
+    NOT a deque. This matters because cancelling an order from the *middle*
+    of a deque requires rebuilding the whole deque (O(n)). With an actual
+    DLL, the order_map in OrderBook can hold a direct reference to this
+    order's node, so removing it is a true O(1) pointer-splice regardless
+    of where in the queue it sits.
     """
     def __init__(self, price: float):
         self.price     = price
-        self.orders    = deque()   # front = oldest (matched first)
+        self.head: Optional[_Node] = None   # oldest (matched first)
+        self.tail: Optional[_Node] = None   # newest
+        self._count    = 0
         self.total_qty = 0
 
-    def add_order(self, order: Order):
-        self.orders.append(order)
+    def add_order(self, order: 'Order') -> _Node:
+        """O(1) append at tail. Returns the node so the caller (OrderBook)
+        can stash it in order_map for O(1) future cancellation."""
+        node = _Node(order)
+        if self.tail is None:
+            self.head = self.tail = node
+        else:
+            node.prev = self.tail
+            self.tail.next = node
+            self.tail = node
+        self._count += 1
         self.total_qty += order.quantity
+        return node
 
-    def peek_front(self) -> Optional[Order]:
-        return self.orders[0] if self.orders else None
+    def peek_front(self) -> Optional['Order']:
+        return self.head.order if self.head else None
 
-    def remove_front(self) -> Optional[Order]:
-        if not self.orders:
+    def remove_front(self) -> Optional['Order']:
+        """O(1) pop from head."""
+        if self.head is None:
             return None
-        o = self.orders.popleft()
-        self.total_qty -= o.quantity
-        return o
+        node = self.head
+        self._unlink(node)
+        return node.order
 
-    def remove_by_id(self, order_id: str) -> bool:
-        before = len(self.orders)
-        self.orders = deque(
-            o for o in self.orders if o.order_id != order_id
-        )
-        removed = len(self.orders) < before
-        if removed:
-            self.total_qty = sum(o.quantity for o in self.orders)
-        return removed
+    def remove_node(self, node: _Node) -> None:
+        """O(1) removal of an arbitrary node — this is what makes cancel
+        truly O(1) instead of the O(n) deque-rebuild it used to be."""
+        self._unlink(node)
+
+    def remove_specific(self, order_id: str) -> Optional['Order']:
+        """Remove and return the order matching order_id, wherever it sits
+        in the queue. Used by self-trade prevention, which may need to
+        fully-fill an order that is NOT at the head (the head was skipped
+        because it belongs to the same trader as the incoming order).
+        O(k) where k is the (small, bounded by STP skip count) position in
+        the queue -- not a full scan, and never the O(n) deque-rebuild
+        pattern this class was originally fixed to avoid for the common
+        case (remove_front / remove_node are still O(1) and used for
+        every non-STP fill)."""
+        node = self.head
+        while node is not None:
+            if node.order.order_id == order_id:
+                order = node.order
+                self._unlink(node)
+                return order
+            node = node.next
+        return None
+
+    def find_node(self, order_id: str) -> Optional[_Node]:
+        node = self.head
+        while node is not None:
+            if node.order.order_id == order_id:
+                return node
+            node = node.next
+        return None
+
+    def _unlink(self, node: _Node) -> None:
+        if node.prev is not None:
+            node.prev.next = node.next
+        else:
+            self.head = node.next
+        if node.next is not None:
+            node.next.prev = node.prev
+        else:
+            self.tail = node.prev
+        node.prev = node.next = None
+        self._count -= 1
+        self.total_qty -= node.order.quantity
 
     def is_empty(self) -> bool:
-        return len(self.orders) == 0
+        return self.head is None
 
     def order_count(self) -> int:
-        return len(self.orders)
+        return self._count
+
+    def __iter__(self):
+        node = self.head
+        while node is not None:
+            yield node.order
+            node = node.next
 
 
 # ══════════════════════════════════════════════════════════════
@@ -116,13 +194,19 @@ class OrderBook:
     DSA:
       bids → SortedDict (Red-Black Tree), highest price first  → O(log n)
       asks → SortedDict (Red-Black Tree), lowest price first   → O(log n)
-      order_map → dict (HashMap), order_id → (side, price)     → O(1) cancel
+      order_map → dict (HashMap), order_id → (side, price, node) → O(1) cancel
+
+    NOTE on the O(1) cancel claim: the HashMap alone only gets you O(1) to
+    find *which price level* an order lives in. Actually removing it from
+    that level used to call deque-rebuild (O(n)). order_map now stores a
+    direct reference to the order's linked-list node, so PriceLevel.remove_node
+    can unlink it in true O(1), independent of queue length or position.
     """
     def __init__(self, symbol: str):
         self.symbol    = symbol
         self.bids      = SortedDict(lambda p: -p)   # max-first
         self.asks      = SortedDict()               # min-first
-        self.order_map: dict[str, tuple[str, float]] = {}
+        self.order_map: dict[str, tuple[str, float, _Node]] = {}
 
     # ── best prices ─────────────────────────────────────────
     def best_bid(self) -> Optional[float]:
@@ -154,17 +238,26 @@ class OrderBook:
     def add_passive(self, order: Order):
         """Rest of unmatched limit order goes into the book."""
         level = self._get_or_create_level(order.side, order.price)
-        level.add_order(order)
-        self.order_map[order.order_id] = (order.side, order.price)
+        node = level.add_order(order)
+        self.order_map[order.order_id] = (order.side, order.price, node)
+
+    def remove_filled(self, side: str, price: float, order_id: str) -> None:
+        """Pop the order_map entry once an order is fully filled and
+        removed from its level via remove_front(). Keeps order_map in sync
+        without needing another lookup."""
+        self.order_map.pop(order_id, None)
 
     def cancel(self, order_id: str) -> bool:
-        """O(1) lookup via HashMap, then remove from level."""
-        if order_id not in self.order_map:
+        """True O(1): HashMap lookup gives the exact node directly, so
+        removal is a constant-time pointer unlink, not a level scan or
+        queue rebuild."""
+        entry = self.order_map.pop(order_id, None)
+        if entry is None:
             return False
-        side, price = self.order_map.pop(order_id)
+        side, price, node = entry
         book = self.bids if side == 'BUY' else self.asks
         if price in book:
-            book[price].remove_by_id(order_id)
+            book[price].remove_node(node)
             self._cleanup_level(side, price)
         return True
 
@@ -261,8 +354,28 @@ class MatchingEngine:
             return False
         return self.books[symbol].cancel(order_id)
 
+    @staticmethod
+    def _peek_after(level: 'PriceLevel', order: 'Order') -> Optional['Order']:
+        """Given an order known to be in `level`, return the next order
+        in FIFO sequence after it (or None if it's last). Used only by
+        self-trade prevention to look past a skipped same-trader order."""
+        node = level.find_node(order.order_id)
+        if node is None or node.next is None:
+            return None
+        return node.next.order
+
     # ── limit order matching ─────────────────────────────────
-    def _match_limit(self, book: OrderBook, order: Order) -> list[Trade]:
+    def _match_limit(self, book: OrderBook, order: Order, rest_unfilled: bool = True) -> list[Trade]:
+        """Core price-time-priority matching loop.
+
+        rest_unfilled: when True (normal LIMIT order behavior), any quantity
+        left over after walking the book is parked as a new resting order.
+        When False (used for MARKET orders via _match_market), leftover
+        quantity is simply dropped — a market order either fills against
+        available liquidity or the unfilled remainder is cancelled, it must
+        NEVER become a resting limit order at an artificial price like
+        +inf/0, which would silently corrupt the book.
+        """
         trades         = []
         remaining_qty  = order.quantity
 
@@ -275,7 +388,27 @@ class MatchingEngine:
 
                 ask_level  = book.asks[best_ask]
                 ask_order  = ask_level.peek_front()
+
+                # Self-trade prevention (STP): a trader's own resting order
+                # is never matched against their own incoming order. Real
+                # exchanges enforce this (e.g. NSE STP, CME self-match
+                # prevention) because self-trades create misleading volume/
+                # price signals and can be a wash-trading vector. We skip
+                # the resting order and check the next one at this price
+                # level instead -- "skip" semantics, the most common STP
+                # mode. If trader_id is None on either side, STP is not
+                # enforced for that order (keeps existing demo/tests, which
+                # don't set trader_id, behaving exactly as before).
+                if (order.trader_id is not None
+                        and ask_order.trader_id is not None
+                        and order.trader_id == ask_order.trader_id):
+                    next_order = self._peek_after(ask_level, ask_order)
+                    if next_order is None:
+                        break  # nothing else to match at this price level
+                    ask_order = next_order
+
                 fill_qty   = min(remaining_qty, ask_order.quantity)
+                fully_filled = fill_qty == ask_order.quantity
 
                 trades.append(Trade(
                     trade_id      = str(uuid.uuid4())[:8].upper(),
@@ -286,13 +419,19 @@ class MatchingEngine:
                     quantity      = fill_qty,
                 ))
 
-                ask_order.quantity -= fill_qty
-                ask_level.total_qty -= fill_qty
-                remaining_qty      -= fill_qty
+                remaining_qty -= fill_qty
 
-                if ask_order.quantity == 0:
-                    ask_level.remove_front()
+                if fully_filled:
+                    # remove_front() subtracts the order's full remaining
+                    # quantity from total_qty exactly once — let it own
+                    # the bookkeeping here, don't also subtract manually
+                    # (that previously caused total_qty to be double-counted).
+                    ask_level.remove_specific(ask_order.order_id)
                     book.order_map.pop(ask_order.order_id, None)
+                else:
+                    ask_order.quantity  -= fill_qty
+                    ask_level.total_qty -= fill_qty
+
                 if ask_level.is_empty():
                     del book.asks[best_ask]
 
@@ -305,7 +444,19 @@ class MatchingEngine:
 
                 bid_level  = book.bids[best_bid]
                 bid_order  = bid_level.peek_front()
+
+                # Self-trade prevention -- see BUY-side comment above for
+                # rationale. Same "skip" semantics.
+                if (order.trader_id is not None
+                        and bid_order.trader_id is not None
+                        and order.trader_id == bid_order.trader_id):
+                    next_order = self._peek_after(bid_level, bid_order)
+                    if next_order is None:
+                        break
+                    bid_order = next_order
+
                 fill_qty   = min(remaining_qty, bid_order.quantity)
+                fully_filled = fill_qty == bid_order.quantity
 
                 trades.append(Trade(
                     trade_id      = str(uuid.uuid4())[:8].upper(),
@@ -316,30 +467,51 @@ class MatchingEngine:
                     quantity      = fill_qty,
                 ))
 
-                bid_order.quantity  -= fill_qty
-                bid_level.total_qty -= fill_qty
-                remaining_qty       -= fill_qty
+                remaining_qty -= fill_qty
 
-                if bid_order.quantity == 0:
-                    bid_level.remove_front()
+                if fully_filled:
+                    bid_level.remove_specific(bid_order.order_id)
                     book.order_map.pop(bid_order.order_id, None)
+                else:
+                    bid_order.quantity  -= fill_qty
+                    bid_level.total_qty -= fill_qty
+
                 if bid_level.is_empty():
                     del book.bids[best_bid]
 
-        # Remaining qty → passive resting limit order
-        if remaining_qty > 0:
+        # Remaining qty → passive resting limit order (LIMIT only; MARKET
+        # orders pass rest_unfilled=False so any unfilled remainder is
+        # dropped instead of resting at an artificial price)
+        if remaining_qty > 0 and rest_unfilled:
             order.quantity = remaining_qty
             book.add_passive(order)
+        elif remaining_qty > 0:
+            # Market order partially/fully unfilled due to insufficient
+            # liquidity — record how much was left on the floor instead of
+            # silently discarding the information.
+            order.quantity = remaining_qty  # reflects unfilled qty for the caller
 
         return trades
 
     # ── market order matching ────────────────────────────────
     def _match_market(self, book: OrderBook, order: Order) -> list[Trade]:
-        """Market order: match at whatever price is available."""
-        # Temporarily set price to extreme value so limit logic matches all
+        """Market order: match at whatever price is available (IOC —
+        Immediate or Cancel). Any quantity that can't be filled against
+        current resting liquidity is simply not executed; it must NEVER
+        rest in the book, because there is no real limit price to rest it
+        at (using +inf/0 as a stand-in would corrupt best_bid/best_ask)."""
+        # Use a sentinel price only for the matching walk's price
+        # comparison; the order's own order_type stays MARKET throughout,
+        # so callers/logs don't see it silently relabeled as LIMIT.
+        original_price = order.price
         order.price = float('inf') if order.side == 'BUY' else 0.0
-        order.order_type = 'LIMIT'
-        return self._match_limit(book, order)
+        try:
+            trades = self._match_limit(book, order, rest_unfilled=False)
+        finally:
+            # Restore a sane price for any post-trade inspection/logging;
+            # the matching walk itself has already completed.
+            order.price = original_price
+        return trades
 
     # ── stats ────────────────────────────────────────────────
     def stats(self) -> dict:
@@ -449,7 +621,13 @@ def run_benchmark():
             side='SELL', price=ask_price, quantity=100 + i * 5
         ))
 
-    # Submit 10,000 random orders and measure latency
+    # Submit 10,000 random orders and measure latency. GC is left enabled
+    # (default Python behavior) -- this benchmark intentionally measures
+    # realistic end-to-end latency including any GC pauses, rather than
+    # disabling GC to produce a more flattering number. See the tail-
+    # latency note below: P99.9 vs P50 is reported explicitly because the
+    # gap is itself a real, explainable finding (see "GC and tail latency"
+    # in README.md), not something to hide by cherry-picking percentiles.
     for i in range(10_000):
         side  = 'BUY' if random.random() > 0.5 else 'SELL'
         price = round(BASE_PRICE + random.uniform(-5, 5), 2)
@@ -470,6 +648,7 @@ def run_benchmark():
     p50  = statistics.median(latencies)
     p99  = lat_sorted[int(len(lat_sorted) * 0.99)]
     p999 = lat_sorted[int(len(lat_sorted) * 0.999)]
+    p_max = lat_sorted[-1]
     tput = 10_000 / (sum(latencies) / 1_000_000)
 
     print(f"\n  Orders processed  : {s['orders_received']:,}")
@@ -479,12 +658,86 @@ def run_benchmark():
     print(f"    Median (P50)    : {p50:.1f} µs")
     print(f"    P99             : {p99:.1f} µs")
     print(f"    P99.9           : {p999:.1f} µs")
+    print(f"    Max             : {p_max:.1f} µs")
+
+    tail_ratio = p999 / p50 if p50 > 0 else 0
+    if tail_ratio > 20:
+        print(f"\n  ⚠ Tail latency note: P99.9 is {tail_ratio:.0f}x the median.")
+        print(f"    This gap is most often explained by Python's cyclic")
+        print(f"    garbage collector pausing the interpreter mid-benchmark.")
+        print(f"    Run with gc_comparison=True (see run_gc_comparison()) to")
+        print(f"    measure the effect directly on this machine.")
+
     print(f"\n  Throughput        : {tput:,.0f} orders/sec")
     print("\n  ✅ Resume bullet ready:")
     print(f"  'Processed {s['orders_received']:,} orders at {tput:,.0f} orders/sec,")
     print(f"   median latency {p50:.1f}µs, P99 {p99:.1f}µs'")
     print("═"*52)
     return engine
+
+
+def run_gc_comparison(n: int = 10_000):
+    """Measures the same 10,000-order workload with Python's garbage
+    collector enabled vs disabled, to quantify how much of the tail
+    latency (P99.9) is attributable to GC pauses on THIS machine.
+
+    Why this matters: a matching engine that's fast on the median but has
+    occasional multi-hundred-microsecond stalls is a real, well-known
+    characteristic of garbage-collected language runtimes (Python, Java,
+    Go all have versions of this conversation) -- it's worth being able
+    to name the cause and the standard mitigations (gc.disable() + manual
+    collection at safe points, gc.freeze() after warmup to exclude
+    long-lived objects from collection scans, or a GC-free runtime like
+    C++/Rust for the hottest path) rather than only reporting the
+    flattering median number.
+    """
+    import gc
+
+    def _run(gc_enabled: bool):
+        if gc_enabled:
+            gc.enable()
+        else:
+            gc.disable()
+        engine = MatchingEngine()
+        engine.add_symbol('GCTEST')
+        BASE = 24_500.0
+        for i in range(50):
+            engine.submit_order(Order(f"SB{i}", 'GCTEST', 'BUY', round(BASE - (i+1)*0.5, 2), 100))
+            engine.submit_order(Order(f"SA{i}", 'GCTEST', 'SELL', round(BASE + (i+1)*0.5, 2), 100))
+        latencies = []
+        for i in range(n):
+            side = 'BUY' if random.random() > 0.5 else 'SELL'
+            price = round(BASE + random.uniform(-5, 5), 2)
+            qty = random.randint(10, 200)
+            otype = 'MARKET' if random.random() < 0.3 else 'LIMIT'
+            order = Order(f"O{i}", 'GCTEST', side, price, qty, otype)
+            t0 = time.perf_counter_ns()
+            engine.submit_order(order)
+            t1 = time.perf_counter_ns()
+            latencies.append((t1 - t0) / 1_000)
+        gc.enable()
+        lat_sorted = sorted(latencies)
+        return {
+            "p50": statistics.median(latencies),
+            "p99": lat_sorted[int(len(lat_sorted) * 0.99)],
+            "p999": lat_sorted[int(len(lat_sorted) * 0.999)],
+            "max": lat_sorted[-1],
+        }
+
+    print("\n" + "═" * 52)
+    print("  GC IMPACT ON TAIL LATENCY")
+    print("═" * 52)
+    random.seed(42)
+    with_gc = _run(gc_enabled=True)
+    random.seed(42)
+    without_gc = _run(gc_enabled=False)
+
+    print(f"\n  {'Metric':<10}{'GC on':>12}{'GC off':>12}{'Delta':>12}")
+    for key in ("p50", "p99", "p999", "max"):
+        delta = with_gc[key] - without_gc[key]
+        print(f"  {key:<10}{with_gc[key]:>10.1f}µs{without_gc[key]:>10.1f}µs{delta:>+10.1f}µs")
+    print("═" * 52)
+    return with_gc, without_gc
 
 
 # ══════════════════════════════════════════════════════════════

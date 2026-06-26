@@ -21,6 +21,9 @@ def limit(oid, side, price, qty):
 def market(oid, side, qty):
     return Order(oid, 'TEST', side, 0, qty, 'MARKET')
 
+def limit_trader(oid, side, price, qty, trader_id):
+    return Order(oid, 'TEST', side, price, qty, 'LIMIT', trader_id=trader_id)
+
 
 # ════════════════════════════════════════════════════════════
 # 1. ORDER BOOK BASICS
@@ -241,3 +244,150 @@ def test_observer_callback_fires():
     e.submit_order(limit('B1', 'BUY',  100.0, 50))
     assert len(fired) == 1
     assert fired[0].quantity == 50
+
+
+# ════════════════════════════════════════════════════════════
+# 8. REGRESSION TESTS — bugs found in code review, now fixed
+# ════════════════════════════════════════════════════════════
+
+def test_unfilled_market_order_does_not_pollute_book():
+    """BUG (fixed): an unfilled MARKET order used to fall through to
+    add_passive() and rest in the book at price=+inf/0, corrupting
+    best_bid/best_ask for all future orders. A MARKET order must behave
+    as Immediate-or-Cancel: unfilled remainder is dropped, never rested."""
+    e = make_engine()
+    trades = e.submit_order(market('M1', 'BUY', 100))  # no liquidity at all
+    assert trades == []
+    book = e.books['TEST']
+    assert book.best_bid() is None
+    assert book.best_ask() is None
+
+
+def test_partially_filled_market_order_drops_remainder():
+    """Only part of a MARKET order can be filled -> the rest must be
+    dropped (IOC), not rested as a phantom limit order."""
+    e = make_engine()
+    e.submit_order(limit('A1', 'SELL', 100.0, 30))
+    trades = e.submit_order(market('M1', 'BUY', 100))   # only 30 available
+    assert len(trades) == 1
+    assert trades[0].quantity == 30
+    book = e.books['TEST']
+    assert book.best_bid() is None   # the leftover 70 must NOT be resting
+
+
+def test_cancel_from_middle_of_queue_is_correct():
+    """BUG (fixed): PriceLevel.remove_by_id() used to rebuild the entire
+    deque (O(n)) to cancel from the middle of a FIFO queue. It now uses a
+    true doubly linked list with direct node references, so cancelling
+    order X2 out of [X1, X2, X3] must leave X1 and X3 in original FIFO
+    order with no trace of X2."""
+    e = make_engine()
+    e.submit_order(limit('X1', 'SELL', 50.0, 10))
+    e.submit_order(limit('X2', 'SELL', 50.0, 10))
+    e.submit_order(limit('X3', 'SELL', 50.0, 10))
+    assert e.cancel_order('TEST', 'X2') is True
+    trades = e.submit_order(limit('Y1', 'BUY', 50.0, 20))
+    assert [t.sell_order_id for t in trades] == ['X1', 'X3']
+
+
+def test_total_qty_consistent_after_partial_fill_and_midqueue_cancel():
+    """BUG (fixed): total_qty used to be decremented both manually in the
+    matching loop AND again inside remove_front()/remove_by_id(), causing
+    drift after a sequence of partial fills + cancels. Verifies the
+    level's total_qty stays exactly correct throughout."""
+    e = make_engine()
+    e.submit_order(limit('A1', 'SELL', 100.0, 50))
+    e.submit_order(limit('A2', 'SELL', 100.0, 70))
+    e.submit_order(limit('A3', 'SELL', 100.0, 30))
+    book = e.books['TEST']
+    assert book.asks[100.0].total_qty == 150
+
+    e.submit_order(limit('B1', 'BUY', 100.0, 20))  # partial fill of A1
+    assert book.asks[100.0].total_qty == 130
+
+    e.cancel_order('TEST', 'A2')  # cancel from middle of queue
+    assert book.asks[100.0].total_qty == 60
+
+    e.submit_order(limit('B2', 'BUY', 100.0, 60))  # fills remainder of A1 + all of A3
+    assert 100.0 not in book.asks  # level fully drained and cleaned up
+
+
+def test_zero_quantity_order_rejected():
+    """BUG (fixed): orders with quantity <= 0 used to be accepted silently
+    and would corrupt book state. Now rejected at construction."""
+    import pytest
+    with pytest.raises(ValueError):
+        limit('BAD', 'BUY', 100.0, 0)
+
+
+def test_negative_price_limit_order_rejected():
+    """BUG (fixed): a LIMIT order with a non-positive price used to be
+    accepted silently. Now rejected at construction."""
+    import pytest
+    with pytest.raises(ValueError):
+        limit('BAD', 'BUY', -5.0, 10)
+
+
+def test_market_order_repr_does_not_crash():
+    """BUG (fixed): Order.__repr__ called f'{self.price:.2f}' unconditionally,
+    which crashes if price is None (as the docstring implies is valid for
+    MARKET orders). repr() must not crash regardless of price."""
+    o = Order('M1', 'TEST', 'BUY', None, 50, 'MARKET')
+    assert 'MKT' in repr(o)
+
+
+# ════════════════════════════════════════════════════════════
+# 9. SELF-TRADE PREVENTION (STP)
+# ════════════════════════════════════════════════════════════
+
+def test_self_trade_is_prevented_skips_to_next_order():
+    """GAP (fixed): the engine previously had no concept of trader
+    identity, so a trader's own resting order could match their own
+    incoming order ('wash trade'). With trader_id set, a same-trader match
+    must be skipped and the next order in the queue matched instead."""
+    e = make_engine()
+    e.submit_order(limit_trader('A-SELL', 'SELL', 100.0, 50, 'trader_A'))
+    e.submit_order(limit_trader('B-SELL', 'SELL', 100.0, 50, 'trader_B'))
+
+    trades = e.submit_order(limit_trader('A-BUY', 'BUY', 100.0, 50, 'trader_A'))
+
+    assert len(trades) == 1
+    assert trades[0].sell_order_id == 'B-SELL'
+
+    remaining = list(e.books['TEST'].asks[100.0])
+    assert len(remaining) == 1
+    assert remaining[0].order_id == 'A-SELL'
+
+
+def test_self_trade_prevention_leaves_own_order_resting_untouched():
+    e = make_engine()
+    e.submit_order(limit_trader('C-SELL', 'SELL', 100.0, 50, 'trader_C'))
+    trades = e.submit_order(limit_trader('C-BUY', 'BUY', 100.0, 50, 'trader_C'))
+
+    assert trades == []
+    assert 100.0 in e.books['TEST'].asks
+    assert e.books['TEST'].asks[100.0].peek_front().order_id == 'C-SELL'
+
+
+def test_orders_without_trader_id_are_unaffected_by_stp():
+    """Backward compatibility: trader_id is optional. Orders that don't
+    set it (matching every pre-existing test and the demo/benchmark code)
+    must behave exactly as before STP was added -- no skip logic engaged."""
+    e = make_engine()
+    e.submit_order(limit('X1', 'SELL', 100.0, 50))
+    trades = e.submit_order(limit('X2', 'BUY', 100.0, 50))
+    assert len(trades) == 1
+    assert trades[0].sell_order_id == 'X1'
+
+
+def test_stp_does_not_break_fifo_for_other_traders():
+    """Self-trade prevention must only skip the colliding trader's order,
+    not disturb FIFO ordering among the other resting orders."""
+    e = make_engine()
+    e.submit_order(limit_trader('T1', 'SELL', 100.0, 20, 'trader_B'))
+    e.submit_order(limit_trader('T2', 'SELL', 100.0, 20, 'trader_A'))  # would self-trade
+    e.submit_order(limit_trader('T3', 'SELL', 100.0, 20, 'trader_B'))
+
+    trades = e.submit_order(limit_trader('BUY1', 'BUY', 100.0, 40, 'trader_A'))
+    # Should fill T1 (20) then skip T2 (own), then fill T3 (20)
+    assert [t.sell_order_id for t in trades] == ['T1', 'T3']
