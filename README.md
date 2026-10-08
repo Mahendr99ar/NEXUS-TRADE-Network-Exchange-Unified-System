@@ -1,16 +1,18 @@
-# NEXUS-TRADE — Order Matching Engine
+# NEXUS-TRADE: Order Matching Engine
 
-> Built from scratch in Python. The core matching algorithm, order book, and FIFO queueing are hand-written — `sortedcontainers` (balanced tree) and `numpy` (vectorized analytics math) are used as supporting libraries rather than reimplemented.
+A limit order book and matching engine in Python. I wrote the matching loop, the order book, and the FIFO queues myself. Two libraries do supporting work: `sortedcontainers` keeps price levels sorted, and `numpy` handles the analytics math.
 
 **Mahendra Meena | IIIT Gwalior | B.Tech EEE 2027**
 
+**Live demo:** [your-app.onrender.com](https://your-app.onrender.com) *(replace with your Render URL after deploying)*
+
 ---
 
-I got curious about how stock exchanges actually work — not the trading part, but the infrastructure. What happens in the milliseconds between you clicking "Buy" and the order getting filled? That curiosity turned into this project.
+I wanted to know what happens between clicking "Buy" and getting a fill. I don't mean the trading side. I mean the exchange software that does the matching. This project is my answer.
 
-Started it under the name **VELOX** (Latin for "fast") — the whole goal was speed. Somewhere along the way it grew into something bigger, so I renamed it NEXUS-TRADE to reflect what it actually is: a network exchange system, not just a latency experiment.
+It started as **VELOX** (Latin for "fast"), and the only goal was speed. It grew from a latency experiment into a small network exchange system, so I renamed it NEXUS-TRADE.
 
-Turns out it's a very interesting DSA problem.
+Most of the hard parts turned out to be data structure choices.
 
 ---
 
@@ -19,68 +21,69 @@ Turns out it's a very interesting DSA problem.
 | Metric | Value |
 |--------|-------|
 | Throughput | ~70,000–80,000 orders/sec |
-| P50 Latency | ~9–10 µs |
-| P99 Latency | ~45–55 µs |
-| Fill Rate | ~97% (varies run to run with random order mix) |
+| P50 latency | ~9–10 µs |
+| P99 latency | ~45–55 µs |
+| Fill rate | ~97% (varies with the random order mix) |
 
-Measured on a regular laptop, single-threaded, no async/multiprocessing tricks — just the right data structures for the right reasons. These numbers are environment-dependent (CPU, Python version, background load) — re-run `run_benchmark()` yourself rather than treating any single number as fixed; report a range, not a cherry-picked best run.
+These were measured on a regular laptop, single-threaded, with no async or multiprocessing. They depend on CPU, Python version, and background load, so run `run_benchmark()` yourself and treat the table as a range, not a fixed result.
 
 ---
 
 ## What it does
 
-NEXUS-TRADE implements **Price-Time Priority matching** — the standard algorithm used by major exchanges (NSE, BSE, NYSE) for their continuous limit order books. You submit a BUY or SELL order, and the engine:
+The engine uses **price-time priority**, the matching rule used by continuous limit order books on exchanges such as NSE, BSE, and NYSE. When a BUY or SELL order arrives, the engine:
 
-1. Checks if there's a matching order on the other side
-2. Fills as much as possible, FIFO within each price level
-3. Parks whatever's left as a resting limit order (LIMIT only — see note below)
-4. Logs the trade and updates analytics in real time
+1. checks the opposite side of the book for a price that crosses,
+2. fills as much as it can, oldest order first within each price level,
+3. rests any unfilled LIMIT quantity in the book, and
+4. records each trade and updates the analytics.
 
-Supports LIMIT and MARKET orders (MARKET orders behave as Immediate-or-Cancel — unfilled remainder is dropped, never rested at an artificial price), a live two-sided order book, genuinely O(1) cancellation, and a quant analytics layer on top (VWAP, Realized Vol, Z-score, Order Imbalance).
+It supports LIMIT and MARKET orders. MARKET orders are Immediate-or-Cancel: any part that can't fill is dropped, never rested at a made-up price. Cancels are O(1). Self-trade prevention is optional: when two orders carry the same `trader_id`, the engine skips the resting one. The analytics layer reports VWAP, realized volatility, z-score, and order imbalance.
 
 ---
 
-## Why these data structures
-
-This was the actual interesting part to figure out.
+## Data structures
 
 ```
 Order Book
-├── Bids  → SortedDict (Red-Black Tree) — max-first, O(log n)
-│   └── Each price level → real doubly linked list — O(1) FIFO matching, O(1) cancel
-└── Asks  → SortedDict (Red-Black Tree) — min-first, O(log n)
-    └── Each price level → real doubly linked list — O(1) FIFO matching, O(1) cancel
+├── Bids  → SortedDict, highest price first, O(log n)
+│   └── each price level → doubly linked list, O(1) FIFO match, O(1) cancel
+└── Asks  → SortedDict, lowest price first, O(log n)
+    └── each price level → doubly linked list, O(1) FIFO match, O(1) cancel
 
-Order Map → dict (HashMap) → order_id -> (side, price, DLL node reference)
-Trade Log → deque(maxlen=1000) — circular buffer (recent-trade cache, not a durable audit log)
+Order map → dict: order_id -> (side, price, linked-list node)
+Trade log → deque(maxlen=1000): recent trades only, not an audit log
 ```
 
-The exchange needs to answer "what's the best bid/ask right now?" millions of times per second. A plain list would be O(n) for both insert and lookup. A Red-Black Tree gives O(log n) — for 10,000 price levels that's the difference between 10,000 operations and 14.
+The engine keeps asking for the best bid and the best ask. A plain sorted list costs O(n) per insert. `SortedDict` from `sortedcontainers` keeps prices in order with roughly O(log n) inserts and lookups. It is built on a sorted list of sublists rather than a red-black tree, but it plays the same role. At 10,000 price levels, log₂ n is about 14.
 
-Cancel rates in live trading can be 90%+ of all messages. **A correctness note from code review**: an earlier version of this project used a `deque` per price level and "cancelled" an order by rebuilding the entire deque while filtering it out — that's O(n) per cancel, not O(1), no matter what the HashMap lookup costs. It's now a true doubly linked list where `order_map` stores a direct reference to the order's node, so cancelling from anywhere in the queue (front, middle, or back) is a constant-time pointer unlink. Verified empirically: cancelling the last order in a 20,000-order queue takes ~5µs with the linked-list version vs. ~1.8ms with the old deque-rebuild version — a ~350x difference that only shows up at scale, which is exactly why it matters for an exchange.
+Cancels can make up 90% or more of exchange messages, so cancel speed matters. An earlier version stored each price level in a `deque` and cancelled by rebuilding the deque without the cancelled order. That is O(n), even though the dict lookup before it was O(1). Each level is now a doubly linked list, and `order_map` holds a direct reference to each order's node. A cancel unlinks two pointers wherever the order sits in the queue. Cancelling the last order in a 20,000-order queue took ~5 µs with the linked list and ~1.8 ms with the deque rebuild.
 
-See [`docs/architecture.md`](docs/architecture.md) for the full breakdown with pseudocode.
+Details and pseudocode are in [`docs/architecture.md`](docs/architecture.md).
 
 | Operation | Structure | Complexity |
 |-----------|-----------|------------|
-| Insert order | Red-Black Tree | O(log n) |
+| Insert order | SortedDict | O(log n) |
 | Match order | Doubly linked list (FIFO) | O(1) per fill |
-| Cancel order | HashMap + DLL node ref | O(1) |
-| Best bid/ask | RB-Tree peek | O(log n) |
-| Trade log | Circular Buffer | O(1) |
+| Cancel order | dict + linked-list node | O(1) |
+| Best bid/ask | SortedDict peek | O(log n) |
+| Trade log | deque(maxlen) | O(1) |
 
 ---
 
-## Running it
+## Running it locally
 
 ```bash
 git clone https://github.com/Mahendr99ar/NEXUS-TRADE-Network-Exchange-Unified-System.git
 cd NEXUS-TRADE-Network-Exchange-Unified-System
 
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 
-# Live demo
+# Terminal demo, then the 10,000-order benchmark
 python src/order_matching_engine.py
+
+# Web app at http://127.0.0.1:8000
+uvicorn api:app --app-dir src --reload
 
 # Tests
 pytest tests/ -v
@@ -88,11 +91,29 @@ pytest tests/ -v
 
 ---
 
+## Web API
+
+The web page at `/` calls these endpoints. FastAPI also generates interactive docs at `/docs`.
+
+| Method | Path | What it does |
+|--------|------|--------------|
+| GET | `/api/book?depth=10` | Bids, asks, best prices, spread, mid |
+| POST | `/api/orders` | Submit an order: `{"side": "BUY", "order_type": "LIMIT", "price": 24500.5, "quantity": 50, "trader_id": "optional"}` |
+| DELETE | `/api/orders/{order_id}` | Cancel a resting order |
+| GET | `/api/orders` | Resting orders placed through the web API |
+| GET | `/api/trades?limit=50` | Recent trades, newest first |
+| GET | `/api/analytics` | VWAP, realized vol, z-score, imbalance, engine stats |
+| POST | `/api/reset` | Clear the book and reseed it |
+
+The web demo trades one symbol, NIFTY50. On startup it seeds five levels on each side of 24,500.
+
+---
+
 ## Sample output
 
 ```
 ════════════════════════════════════════════
-  NEXUS-TRADE ORDER MATCHING ENGINE — LIVE DEMO
+  NEXUS-TRADE ORDER MATCHING ENGINE: DEMO
   By Mahendra Meena | IIIT Gwalior
 ════════════════════════════════════════════
   [Engine] Symbol added: NIFTY50
@@ -112,14 +133,14 @@ pytest tests/ -v
 
 ## Analytics layer
 
-The signals here connect directly to earlier work I did on Pairs Trading (Sharpe: 1.8) and NIFTY Volatility Prediction:
+These signals come from my earlier work on pairs trading (Sharpe 1.8) and NIFTY volatility prediction.
 
-| Signal | Formula | Why it matters |
-|--------|---------|----------------|
+| Signal | Formula | Use |
+|--------|---------|-----|
 | VWAP | Σ(price × vol) / Σvol | Standard execution benchmark for institutions |
-| Realized Volatility | std(log returns) × √252 | Same computation as Black-Scholes sigma input |
-| Z-score | (price − mean) / std | Mean-reversion trigger — same signal from the pairs trading work |
-| Order Imbalance | (bidQty − askQty) / total | Reported in academic literature to have short-term directional accuracy in the 60-65% range over ~10s windows; treat as a research-backed heuristic, not a guarantee |
+| Realized volatility | std(log returns) × √(252 × 390) | Annualised, treating each trade as a 1-minute bar (390 per session, 252 sessions) |
+| Z-score | (price − mean) / std | Mean-reversion entry signal from the pairs trading work |
+| Order imbalance | (bidQty − askQty) / total, at the top of book | Studies report 60–65% short-term directional accuracy over ~10 s windows. A heuristic, not a guarantee |
 
 ---
 
@@ -128,32 +149,42 @@ The signals here connect directly to earlier work I did on Pairs Trading (Sharpe
 ```
 NEXUS-TRADE/
 ├── src/
-│   └── order_matching_engine.py   # core engine
+│   ├── order_matching_engine.py   # engine, analytics, demo, benchmark
+│   └── api.py                     # FastAPI app for the web demo
+├── static/
+│   └── index.html                 # web page (plain HTML/JS, no build step)
 ├── tests/
-│   └── test_engine.py             # pytest suite (29 tests, incl. regression tests for fixed bugs)
+│   ├── test_engine.py             # 33 engine tests, including regressions
+│   └── test_api.py                # 7 API tests
 ├── docs/
-│   └── architecture.md            # detailed design notes
-├── requirements.txt
+│   └── architecture.md            # design notes
+├── .github/workflows/tests.yml    # runs pytest on every push
+├── render.yaml                    # free hosting config for Render
+├── requirements.txt               # runtime
+├── requirements-dev.txt           # runtime + pytest + httpx
 └── README.md
 ```
 
 ---
 
-## Known limitations (honest list)
+## Known limitations
 
-- **Single-threaded, no concurrency safety.** `order_map`, `bids`, and `asks` are shared mutable state with no locking. Fine for a single-process demo; would need synchronization (or a single-writer event-loop design) before handling concurrent order submission from multiple clients.
-- **Trade log is a bounded cache, not an audit trail.** `deque(maxlen=1000)` silently drops older trades. A real exchange needs a durable, append-only log for compliance/replay — this is explicitly out of scope here.
-- **No persistence.** Order book and trade history live in memory only; a crash/restart loses all state.
-- **Single matching thread / no sharding across symbols** — fine at this scale, would need partitioning per-symbol to scale further.
+- **The engine isn't thread-safe.** `order_map`, `bids`, and `asks` are shared mutable state. The web API puts one lock around every engine call, which is enough for a demo. Real concurrent order entry needs a single-writer design.
+- **The trade log is a cache, not an audit trail.** `deque(maxlen=1000)` drops older trades. An exchange needs a durable, append-only log for compliance and replay.
+- **There's no persistence.** Everything lives in memory. On the free Render plan the instance sleeps after 15 idle minutes, and the book resets when it wakes up.
+- **The web demo has one shared book.** Every visitor sees and trades against the same orders.
+- **There's one matching thread and no sharding by symbol.** That's fine at this scale. Going further would mean partitioning by symbol.
 
 ## What's next
 
-- [ ] WebSocket API via FastAPI — so you can actually submit orders over a connection
-- [ ] Multi-symbol support (BANKNIFTY, RELIANCE, etc.)
-- [ ] C++ port — Python gets you to ~75K orders/sec, C++ should hit sub-microsecond
+- [x] HTTP API with FastAPI and a web page
+- [ ] WebSocket feed instead of polling
+- [ ] More symbols (BANKNIFTY, RELIANCE, etc.)
+- [ ] C++ port: Python reaches ~75K orders/sec; the goal for C++ is sub-microsecond latency
 - [ ] FIX protocol parsing
 - [ ] SQLite persistence for the order log
-- [ ] Thread-safety / concurrent order submission
+- [ ] Concurrent order submission
+
 ---
 
-**Mahendra Meena** — [LinkedIn](https://www.linkedin.com/in/mahendra-meena-72047b201/?lipi=urn%3Ali%3Apage%3Ad_flagship3_profile_view_base_contact_details%3BiaoO9%2FdjRKWOhaWxs1eueg%3D%3D)
+**Mahendra Meena**, [LinkedIn](https://www.linkedin.com/in/mahendra-meena-72047b201/)

@@ -1,5 +1,5 @@
 """
-Unit Tests — NEXUS-TRADE: Order Matching Engine
+Tests for the NEXUS-TRADE order matching engine.
 Run: pytest tests/ -v
 """
 
@@ -76,7 +76,7 @@ def test_best_ask_is_lowest():
 
 
 # ════════════════════════════════════════════════════════════
-# 2. MATCHING — LIMIT ORDERS
+# 2. MATCHING: LIMIT ORDERS
 # ════════════════════════════════════════════════════════════
 
 def test_no_match_when_prices_dont_cross():
@@ -127,7 +127,7 @@ def test_trade_price_is_passive_side():
 
 
 # ════════════════════════════════════════════════════════════
-# 3. FIFO — PRICE-TIME PRIORITY
+# 3. FIFO: PRICE-TIME PRIORITY
 # ════════════════════════════════════════════════════════════
 
 def test_fifo_within_price_level():
@@ -160,7 +160,7 @@ def test_market_sell_fills_at_best_bid():
 
 
 # ════════════════════════════════════════════════════════════
-# 5. CANCEL — O(1) VIA HASHMAP
+# 5. CANCEL: O(1) VIA HASHMAP
 # ════════════════════════════════════════════════════════════
 
 def test_cancel_existing_order():
@@ -247,11 +247,11 @@ def test_observer_callback_fires():
 
 
 # ════════════════════════════════════════════════════════════
-# 8. REGRESSION TESTS — bugs found in code review, now fixed
+# 8. REGRESSION TESTS
 # ════════════════════════════════════════════════════════════
 
 def test_unfilled_market_order_does_not_pollute_book():
-    """BUG (fixed): an unfilled MARKET order used to fall through to
+    """Regression: an unfilled MARKET order used to fall through to
     add_passive() and rest in the book at price=+inf/0, corrupting
     best_bid/best_ask for all future orders. A MARKET order must behave
     as Immediate-or-Cancel: unfilled remainder is dropped, never rested."""
@@ -276,7 +276,7 @@ def test_partially_filled_market_order_drops_remainder():
 
 
 def test_cancel_from_middle_of_queue_is_correct():
-    """BUG (fixed): PriceLevel.remove_by_id() used to rebuild the entire
+    """Regression: PriceLevel.remove_by_id() used to rebuild the entire
     deque (O(n)) to cancel from the middle of a FIFO queue. It now uses a
     true doubly linked list with direct node references, so cancelling
     order X2 out of [X1, X2, X3] must leave X1 and X3 in original FIFO
@@ -291,7 +291,7 @@ def test_cancel_from_middle_of_queue_is_correct():
 
 
 def test_total_qty_consistent_after_partial_fill_and_midqueue_cancel():
-    """BUG (fixed): total_qty used to be decremented both manually in the
+    """Regression: total_qty used to be decremented both manually in the
     matching loop AND again inside remove_front()/remove_by_id(), causing
     drift after a sequence of partial fills + cancels. Verifies the
     level's total_qty stays exactly correct throughout."""
@@ -313,7 +313,7 @@ def test_total_qty_consistent_after_partial_fill_and_midqueue_cancel():
 
 
 def test_zero_quantity_order_rejected():
-    """BUG (fixed): orders with quantity <= 0 used to be accepted silently
+    """Regression: orders with quantity <= 0 used to be accepted silently
     and would corrupt book state. Now rejected at construction."""
     import pytest
     with pytest.raises(ValueError):
@@ -321,7 +321,7 @@ def test_zero_quantity_order_rejected():
 
 
 def test_negative_price_limit_order_rejected():
-    """BUG (fixed): a LIMIT order with a non-positive price used to be
+    """Regression: a LIMIT order with a non-positive price used to be
     accepted silently. Now rejected at construction."""
     import pytest
     with pytest.raises(ValueError):
@@ -329,7 +329,7 @@ def test_negative_price_limit_order_rejected():
 
 
 def test_market_order_repr_does_not_crash():
-    """BUG (fixed): Order.__repr__ called f'{self.price:.2f}' unconditionally,
+    """Regression: Order.__repr__ called f'{self.price:.2f}' unconditionally,
     which crashes if price is None (as the docstring implies is valid for
     MARKET orders). repr() must not crash regardless of price."""
     o = Order('M1', 'TEST', 'BUY', None, 50, 'MARKET')
@@ -341,7 +341,7 @@ def test_market_order_repr_does_not_crash():
 # ════════════════════════════════════════════════════════════
 
 def test_self_trade_is_prevented_skips_to_next_order():
-    """GAP (fixed): the engine previously had no concept of trader
+    """Regression: the engine previously had no concept of trader
     identity, so a trader's own resting order could match their own
     incoming order ('wash trade'). With trader_id set, a same-trader match
     must be skipped and the next order in the queue matched instead."""
