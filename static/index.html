@@ -25,6 +25,14 @@
          font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
   .num { font-variant-numeric: tabular-nums; }
   button { font: inherit; cursor: pointer; }
+  /* app chrome behaves like an app: no text caret or selection on click */
+  body { caret-color: transparent; }
+  input { caret-color: auto; }
+  .topbar, nav, .tabs, .wl-row, .depth, .stats-row, .ohlc, .aside-foot, .inst-head, .card-title,
+  .menu, .ow-head, .ow-tabs, .radios, .btn, .tag, .rowbtn, .sub { user-select: none; -webkit-user-select: none; }
+  a { -webkit-tap-highlight-color: transparent; }
+  a:focus, button:focus { outline: none; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--buy); outline-offset: 2px; }
   .up { color: var(--up); } .down { color: var(--down); } .muted { color: var(--muted); }
   [hidden] { display: none !important; }
 
@@ -116,6 +124,7 @@
 
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 3px; box-shadow: var(--shadow); }
   .chart-card { padding: 16px 18px 10px; margin-bottom: 24px; }
+  #tabs-card { scroll-margin-top: 76px; }
   .card-title { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
   .card-title h2 { font-size: 15px; font-weight: 400; color: var(--ink-strong); margin: 0; }
   .card-title span { color: var(--muted); font-size: 12px; }
@@ -129,7 +138,9 @@
   .stats-row b { font-size: 20px; font-weight: 300; color: var(--ink-strong); }
   .stats-row b.up { color: var(--up); } .stats-row b.down { color: var(--down); }
 
-  .tabs { display: flex; gap: 26px; border-bottom: 1px solid var(--line); padding: 0 14px; overflow-x: auto; }
+  .tabs { display: flex; gap: 26px; border-bottom: 1px solid var(--line); padding: 0 14px;
+          overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+  .tabs::-webkit-scrollbar { display: none; }
   .tabs a { padding: 11px 0; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
   .tabs a.on { color: var(--sell); border-bottom-color: var(--sell); }
   .sub { padding: 14px 14px 6px; font-size: 14px; color: var(--ink-strong); }
@@ -274,7 +285,6 @@
       <a data-jump="orders">Orders</a>
       <a class="hide-sm" data-jump="positions">Positions</a>
       <a class="hide-sm" data-jump="funds">Funds</a>
-      <a class="hide-sm" href="/docs" target="_blank" rel="noopener">API</a>
     </nav>
     <div class="profile">
       <button class="avatar" id="avatar" aria-haspopup="true" aria-expanded="false">–</button>
