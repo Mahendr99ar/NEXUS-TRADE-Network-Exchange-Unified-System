@@ -391,3 +391,87 @@ def test_stp_does_not_break_fifo_for_other_traders():
     trades = e.submit_order(limit_trader('BUY1', 'BUY', 100.0, 40, 'trader_A'))
     # Should fill T1 (20) then skip T2 (own), then fill T3 (20)
     assert [t.sell_order_id for t in trades] == ['T1', 'T3']
+
+
+# ════════════════════════════════════════════════════════════
+# 10. STP EDGE CASES, TICK SIZE, ORDER STATUS
+# ════════════════════════════════════════════════════════════
+
+def test_stp_skips_every_own_order_not_just_the_first():
+    """Regression: STP used to skip only the order at the head, so a second
+    own order behind it would still self-trade."""
+    e = make_engine()
+    e.submit_order(limit_trader('A1', 'SELL', 100.0, 10, 'trader_A'))
+    e.submit_order(limit_trader('A2', 'SELL', 100.0, 10, 'trader_A'))
+    e.submit_order(limit_trader('B1', 'SELL', 100.0, 10, 'trader_B'))
+    trades = e.submit_order(limit_trader('BUY', 'BUY', 100.0, 10, 'trader_A'))
+    assert [t.sell_order_id for t in trades] == ['B1']
+
+
+def test_stp_moves_on_to_next_price_level():
+    """Own orders at the best price must not stop the walk: the next
+    crossing level from another trader still fills."""
+    e = make_engine()
+    e.submit_order(limit_trader('A1', 'SELL', 100.0, 10, 'trader_A'))
+    e.submit_order(limit_trader('B1', 'SELL', 101.0, 10, 'trader_B'))
+    trades = e.submit_order(limit_trader('BUY', 'BUY', 101.0, 10, 'trader_A'))
+    assert [(t.sell_order_id, t.price) for t in trades] == [('B1', 101.0)]
+
+
+def test_stp_never_leaves_a_crossed_book():
+    """Regression: a LIMIT remainder that could only match the trader's
+    own orders used to rest anyway, leaving best bid > best ask."""
+    e = make_engine()
+    e.submit_order(limit_trader('A1', 'SELL', 100.0, 10, 'trader_A'))
+    buy = limit_trader('BUY', 'BUY', 101.0, 10, 'trader_A')
+    trades = e.submit_order(buy)
+    book = e.books['TEST']
+    assert trades == []
+    assert book.best_bid() is None          # remainder was not rested
+    assert buy.status == 'CANCELLED'
+    assert 'self-trade' in buy.message
+
+
+def test_float_prices_share_one_level():
+    """Regression: 0.1 + 0.2 and 0.3 used to create two price levels."""
+    e = make_engine()
+    e.submit_order(limit('X', 'BUY', 0.1 + 0.2, 1))
+    e.submit_order(limit('Y', 'BUY', 0.3, 1))
+    assert len(e.books['TEST'].bids) == 1
+
+
+def test_tick_size_rejects_off_tick_price():
+    import pytest
+    e = MatchingEngine()
+    e.add_symbol('NIFTY', tick_size=0.05, verbose=False)
+    bad = Order('B', 'NIFTY', 'BUY', 100.03, 10)
+    with pytest.raises(ValueError):
+        e.submit_order(bad)
+    assert bad.status == 'REJECTED'
+    assert e.books['NIFTY'].best_bid() is None
+    good = Order('G', 'NIFTY', 'BUY', 100.05, 10)
+    e.submit_order(good)
+    assert e.books['NIFTY'].best_bid() == 100.05
+
+
+def test_order_status_and_filled_qty():
+    e = make_engine()
+    a = limit('A', 'SELL', 100.0, 50)
+    e.submit_order(a)
+    assert a.status == 'OPEN' and a.filled_qty == 0
+    b = limit('B', 'BUY', 100.0, 20)
+    e.submit_order(b)
+    assert b.status == 'COMPLETE' and b.filled_qty == 20
+    assert a.status == 'OPEN' and a.filled_qty == 20 and a.quantity == 30
+    assert a.original_qty == 50
+    e.cancel_order('TEST', 'A')
+    assert a.status == 'CANCELLED'
+    m = market('M', 'BUY', 10)
+    e.submit_order(m)
+    assert m.status == 'CANCELLED' and m.filled_qty == 0
+
+
+def test_invalid_side_rejected():
+    import pytest
+    with pytest.raises(ValueError):
+        Order('X', 'TEST', 'HOLD', 100.0, 10)

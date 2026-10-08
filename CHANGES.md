@@ -1,5 +1,38 @@
 # Changelog
 
+## Paper trading, broker layer, and live market
+
+- **Accounts.** `POST /api/login` creates a paper account with ₹10,00,000. The web page has a login screen and a profile menu with funds, Reset account, and Logout.
+- **Broker layer** (`src/broker.py`). Before an order reaches the engine it is checked for margin (intraday MIS, 20%, so 5x), price band (±10% of LTP), tick size, open-order limit (50), and order rate (10 a second). A failed check gives a REJECTED order with the reason. Short selling is allowed when there is margin for it.
+- **Positions and P&L.** Every fill updates the position, average price, and realized and unrealized P&L. The page shows Positions (with an Exit button), Funds, open and executed orders, and the user's own trades.
+- **Simulated traders** (`src/market_maker.py`). A market maker re-quotes five levels a side every second around a random-walk fair price, and small market orders from other traders print trades, so the price moves and the book never runs dry.
+- **Security.** Cancelling needs the token of the account that placed the order. `POST /api/reset` needs the `ADMIN_KEY` environment variable.
+- 20 API, broker, and market-maker tests in `tests/test_api.py`.
+
+## Engine fixes
+
+### Self-trade prevention only skipped one order
+
+The old loop skipped the order at the front of the level and then matched the next one without checking its trader. With two orders from the same trader at the front, the second one self-traded. The loop now skips every own order in the level and moves on to the next price level.
+
+**Test:** `test_stp_skips_every_own_order_not_just_the_first`, `test_stp_moves_on_to_next_price_level`.
+
+### Self-trade prevention could cross the book
+
+When the only crossing orders belonged to the same trader, matching stopped and the incoming LIMIT order rested anyway, leaving best bid above best ask (spread -1 in a reproduction). A remainder that would cross is now cancelled with a message instead.
+
+**Test:** `test_stp_never_leaves_a_crossed_book`.
+
+### Float prices created duplicate levels
+
+`0.1 + 0.2` and `0.3` became two price levels. Limit prices are now normalized before use as keys, and with a tick size set, off-tick prices are rejected.
+
+**Test:** `test_float_prices_share_one_level`, `test_tick_size_rejects_off_tick_price`.
+
+### Order status
+
+`Order` now has `status`, `filled_qty`, `original_qty`, and `message`, so the caller can see what happened to an order after it was submitted. Invalid sides and order types are rejected at construction.
+
 ## Web API and hosting
 
 - Added `src/api.py`, a FastAPI app with endpoints for the book, order entry, cancel, trades, analytics, and reset. One lock serialises access to the engine.
@@ -84,4 +117,4 @@ After the linked-list change, unlinking a node subtracts that order's quantity f
 
 ## Tests
 
-33 engine tests and 7 API tests, 40 in total, all passing.
+40 engine tests and 20 API, broker, and market-maker tests, 60 in total, all passing.

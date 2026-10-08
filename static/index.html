@@ -25,7 +25,8 @@
          font: 13px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
   .num { font-variant-numeric: tabular-nums; }
   button { font: inherit; cursor: pointer; }
-  .up { color: var(--up); } .down { color: var(--down); }
+  .up { color: var(--up); } .down { color: var(--down); } .muted { color: var(--muted); }
+  [hidden] { display: none !important; }
 
   /* top bar */
   .topbar { position: sticky; top: 0; z-index: 20; height: 60px; background: var(--panel);
@@ -39,12 +40,24 @@
            font-weight: 600; letter-spacing: .02em; }
   .brand svg { display: block; }
   nav { margin-left: auto; display: flex; height: 100%; }
-  nav a { display: flex; align-items: center; padding: 0 16px; color: var(--ink); text-decoration: none;
+  nav a { display: flex; align-items: center; padding: 0 14px; color: var(--ink); text-decoration: none;
           border-bottom: 2px solid transparent; cursor: pointer; }
   nav a:hover, nav a.on { color: var(--sell); }
   nav a.on { border-bottom-color: var(--sell); }
-  .avatar { margin: 0 20px 0 10px; width: 30px; height: 30px; border-radius: 50%; background: var(--hover);
-            border: 1px solid var(--line-strong); display: grid; place-items: center; font-size: 11px; color: var(--muted); }
+  .profile { position: relative; margin: 0 20px 0 8px; }
+  .avatar { width: 32px; height: 32px; border-radius: 50%; background: rgba(255,87,34,.12); color: var(--sell);
+            border: 0; display: grid; place-items: center; font-size: 12px; font-weight: 600; letter-spacing: .03em; }
+  .avatar:hover { box-shadow: 0 0 0 3px rgba(255,87,34,.15); }
+  .menu { position: absolute; right: 0; top: 44px; width: 270px; background: var(--panel); border: 1px solid var(--line);
+          border-radius: 3px; box-shadow: 0 8px 30px rgba(0,0,0,.16); z-index: 40; }
+  .menu-head { padding: 16px 18px; border-bottom: 1px solid var(--line); }
+  .menu-head b { display: block; color: var(--ink-strong); font-size: 15px; font-weight: 500; }
+  .menu-head span { color: var(--muted); font-size: 12px; }
+  .menu-funds { padding: 12px 18px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; }
+  .menu-funds span { color: var(--muted); font-size: 12px; }
+  .menu a { display: flex; align-items: center; gap: 10px; padding: 10px 18px; color: var(--ink); cursor: pointer; text-decoration: none; }
+  .menu a:hover { background: var(--hover); color: var(--sell); }
+  .menu .sep { border-top: 1px solid var(--line); }
 
   /* layout */
   .layout { display: flex; max-width: 1280px; margin: 0 auto; min-height: calc(100vh - 60px); }
@@ -55,7 +68,6 @@
   .search { display: flex; align-items: center; gap: 10px; padding: 0 18px; height: 50px;
             border-bottom: 1px solid var(--line); color: var(--muted); }
   .search input { flex: 1; border: 0; outline: 0; background: transparent; color: var(--ink); font: inherit; }
-  .search .count { font-size: 12px; }
   .wl-row { position: relative; display: flex; align-items: center; padding: 13px 18px;
             border-bottom: 1px solid var(--line); cursor: pointer; }
   .wl-row:hover { background: var(--hover); }
@@ -85,7 +97,9 @@
   .ohlc span { display: block; font-size: 11px; color: var(--muted); }
   .ohlc b { font-weight: 500; color: var(--ink-strong); }
   .aside-foot { padding: 14px 18px; color: var(--muted); font-size: 12px; display: flex; justify-content: space-between; align-items: center; }
-  .linkbtn { background: none; border: 0; color: var(--buy); padding: 0; }
+  .live { display: inline-flex; align-items: center; gap: 6px; }
+  .live i { width: 7px; height: 7px; border-radius: 50%; background: var(--up); animation: pulse 1.6s infinite; }
+  @keyframes pulse { 50% { opacity: .3; } }
 
   /* main */
   .inst-head { display: flex; align-items: flex-end; gap: 20px; flex-wrap: wrap; margin-bottom: 20px; }
@@ -98,6 +112,7 @@
   .btn.buy { background: var(--buy); } .btn.buy:hover { background: var(--buy-dark); }
   .btn.sell { background: var(--sell); } .btn.sell:hover { background: var(--sell-dark); }
   .btn.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line-strong); }
+  .btn:disabled { opacity: .6; cursor: default; }
 
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 3px; box-shadow: var(--shadow); }
   .chart-card { padding: 16px 18px 10px; margin-bottom: 24px; }
@@ -112,27 +127,43 @@
   .stats-row div:last-child { border-right: 0; }
   .stats-row span { display: block; color: var(--muted); font-size: 12px; margin-bottom: 2px; }
   .stats-row b { font-size: 20px; font-weight: 300; color: var(--ink-strong); }
+  .stats-row b.up { color: var(--up); } .stats-row b.down { color: var(--down); }
 
-  .tabs { display: flex; gap: 26px; border-bottom: 1px solid var(--line); margin-bottom: 0; }
-  .tabs a { padding: 10px 0; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tabs { display: flex; gap: 26px; border-bottom: 1px solid var(--line); padding: 0 14px; overflow-x: auto; }
+  .tabs a { padding: 11px 0; cursor: pointer; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
   .tabs a.on { color: var(--sell); border-bottom-color: var(--sell); }
+  .sub { padding: 14px 14px 6px; font-size: 14px; color: var(--ink-strong); }
+  .sub small { color: var(--muted); font-size: 12px; margin-left: 4px; }
   .data { width: 100%; border-collapse: collapse; }
   .data th { text-align: left; font-weight: 400; font-size: 12px; color: var(--muted); padding: 10px 14px;
-             border-bottom: 1px solid var(--line); }
-  .data td { padding: 10px 14px; border-bottom: 1px solid var(--line); }
+             border-bottom: 1px solid var(--line); white-space: nowrap; }
+  .data td { padding: 10px 14px; border-bottom: 1px solid var(--line); vertical-align: middle; }
   .data tr:hover td { background: var(--hover); }
   .data .r { text-align: right; }
-  .tag { display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: .04em; padding: 2px 7px; border-radius: 2px; }
+  .data tr.total td { font-weight: 500; color: var(--ink-strong); }
+  .data tr.closed td { color: var(--muted); }
+  .data .msg { display: block; font-size: 11px; color: var(--muted); max-width: 280px; }
+  .tag { display: inline-block; font-size: 10px; font-weight: 600; letter-spacing: .04em; padding: 2px 7px; border-radius: 2px; white-space: nowrap; }
   .tag.buy { color: var(--buy); background: rgba(65,132,243,.12); }
   .tag.sell { color: var(--sell); background: rgba(255,87,34,.12); }
-  .tag.open { color: var(--muted); background: var(--hover); border: 1px solid var(--line-strong); }
-  .empty-state { padding: 40px 14px; text-align: center; color: var(--muted); }
-  .cancel-x { background: none; border: 1px solid var(--line-strong); color: var(--ink); border-radius: 3px; padding: 3px 10px; font-size: 12px; }
-  .cancel-x:hover { border-color: var(--down); color: var(--down); }
+  .tag.OPEN { color: var(--buy); background: rgba(65,132,243,.08); border: 1px solid rgba(65,132,243,.35); }
+  .tag.COMPLETE { color: var(--up); background: rgba(76,175,80,.12); }
+  .tag.CANCELLED { color: var(--muted); background: var(--hover); border: 1px solid var(--line-strong); }
+  .tag.REJECTED { color: var(--down); background: rgba(226,95,91,.12); }
+  .tag.mis { color: #9c6ade; background: rgba(156,106,222,.12); }
+  .empty-state { padding: 34px 14px; text-align: center; color: var(--muted); }
+  .rowbtn { background: none; border: 1px solid var(--line-strong); color: var(--ink); border-radius: 3px; padding: 3px 10px; font-size: 12px; }
+  .rowbtn:hover { border-color: var(--down); color: var(--down); }
+  .funds { display: grid; grid-template-columns: 1fr 1fr; gap: 0 40px; padding: 8px 18px 18px; }
+  .funds .big { grid-column: 1 / -1; padding: 14px 0 18px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+  .funds .big span { color: var(--muted); font-size: 12px; display: block; }
+  .funds .big b { font-size: 30px; font-weight: 300; color: var(--ink-strong); }
+  .funds .line { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .funds .line span { color: var(--muted); }
   .disclaimer { color: var(--muted); font-size: 12px; margin-top: 26px; }
   kbd { font: 11px ui-monospace, Menlo, monospace; border: 1px solid var(--line-strong); border-radius: 3px; padding: 0 4px; }
 
-  /* order window */
+  /* overlays */
   .backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.25); display: none; z-index: 50;
               align-items: flex-start; justify-content: center; padding-top: 12vh; }
   .backdrop.open { display: flex; }
@@ -142,16 +173,17 @@
   .ow.buy .ow-head { background: var(--buy); } .ow.sell .ow-head { background: var(--sell); }
   .ow-head .t { font-size: 15px; font-weight: 500; }
   .ow-head .t small { opacity: .85; font-weight: 400; margin-left: 8px; font-size: 12px; }
-  .switch { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 12px; cursor: pointer; user-select: none; }
+  .switch { margin-left: auto; display: flex; align-items: center; cursor: pointer; user-select: none; }
   .switch .track { width: 34px; height: 18px; border-radius: 9px; background: rgba(255,255,255,.35); position: relative; }
   .switch .knob { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; transition: left .15s; }
   .ow.sell .switch .knob { left: 18px; }
-  .ow-tabs { display: flex; gap: 22px; padding: 0 20px; border-bottom: 1px solid var(--line); }
-  .ow-tabs a { padding: 10px 0; color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .ow-tabs { display: flex; gap: 22px; padding: 0 20px; border-bottom: 1px solid var(--line); align-items: center; }
+  .ow-tabs a { padding: 10px 0; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; }
   .ow.buy .ow-tabs a.on { color: var(--buy); border-bottom-color: var(--buy); }
   .ow.sell .ow-tabs a.on { color: var(--sell); border-bottom-color: var(--sell); }
+  .ow-tabs .tag { margin-left: auto; }
   .ow-body { padding: 22px 20px 8px; }
-  .fields { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .fld { position: relative; }
   .fld label { position: absolute; top: -8px; left: 8px; background: var(--panel); padding: 0 4px; font-size: 11px; color: var(--muted); }
   .fld input { width: 100%; height: 40px; border: 1px solid var(--line-strong); border-radius: 3px; padding: 0 10px;
@@ -159,43 +191,71 @@
   .fld input:focus { outline: 0; border-color: var(--buy); }
   .ow.sell .fld input:focus { border-color: var(--sell); }
   .fld input:disabled { background: var(--hover); color: var(--muted); }
-  .radios { display: flex; gap: 18px; margin-top: 8px; padding-left: 2px; }
+  .radios { display: flex; gap: 18px; margin-top: 10px; padding-left: 2px; }
   .radios label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
   .ow.buy input[type=radio] { accent-color: var(--buy); } .ow.sell input[type=radio] { accent-color: var(--sell); }
   .ow-note { color: var(--muted); font-size: 12px; margin: 16px 0 0; min-height: 18px; }
   .ow-note.err { color: var(--down); }
-  .ow-foot { display: flex; align-items: center; gap: 10px; padding: 14px 20px; background: var(--hover); border-top: 1px solid var(--line); margin-top: 14px; }
-  .ow-foot .info { margin-right: auto; color: var(--muted); font-size: 12px; }
+  .ow-foot { display: flex; align-items: center; gap: 10px; padding: 14px 20px; background: var(--hover); border-top: 1px solid var(--line); margin-top: 14px; flex-wrap: wrap; }
+  .ow-foot .info { margin-right: auto; color: var(--muted); font-size: 12px; line-height: 1.6; }
   .ow-foot .info b { color: var(--ink-strong); font-weight: 500; }
 
-  .toast { position: fixed; right: 20px; bottom: 20px; z-index: 60; background: var(--panel); border-left: 4px solid var(--up);
-           box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 12px 16px; border-radius: 3px; max-width: 340px;
+  .login { position: fixed; inset: 0; z-index: 70; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .login-card { width: 380px; max-width: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: 3px;
+                box-shadow: var(--shadow); padding: 34px 32px 28px; text-align: center; }
+  .login-card svg { margin: 0 auto 14px; display: block; }
+  .login-card h1 { font-size: 20px; font-weight: 400; color: var(--ink-strong); margin: 0 0 6px; }
+  .login-card p { color: var(--muted); margin: 0 0 24px; }
+  .login-card .fld { text-align: left; margin-bottom: 16px; }
+  .login-card .btn { width: 100%; padding: 11px; }
+  .login-card .fine { font-size: 12px; margin: 18px 0 0; }
+  .login-card .err { color: var(--down); font-size: 12px; min-height: 18px; margin-top: 8px; }
+
+  .toast { position: fixed; right: 20px; bottom: 20px; z-index: 80; background: var(--panel); border-left: 4px solid var(--up);
+           box-shadow: 0 6px 24px rgba(0,0,0,.18); padding: 12px 16px; border-radius: 3px; max-width: 360px;
            transform: translateY(20px); opacity: 0; transition: all .2s; pointer-events: none; }
   .toast.show { transform: none; opacity: 1; }
   .toast.err { border-left-color: var(--down); }
+  .toast.info { border-left-color: var(--buy); }
   .toast b { display: block; color: var(--ink-strong); font-weight: 500; }
 
   @media (max-width: 960px) {
-    .ticker, nav a.hide-sm, .avatar { display: none; }
-    .brand { margin: 0 16px; }
+    .ticker, nav a.hide-sm { display: none; }
+    .brand { margin: 0 12px 0 16px; }
+    .profile { margin-right: 14px; }
     .layout { flex-direction: column; }
     aside { width: 100%; border-right: 0; }
     main { padding: 20px 16px 32px; }
     .wl-actions { display: flex; position: static; transform: none; margin-left: 12px; }
-    nav a { padding: 0 12px; }
     .wl-row .chg { display: none; }
+    nav a { padding: 0 10px; }
     .stats-row { grid-template-columns: 1fr 1fr; }
     .stats-row div:nth-child(2) { border-right: 0; }
     .stats-row div:nth-child(-n+2) { border-bottom: 1px solid var(--line); }
     .inst-head .btns { margin-left: 0; width: 100%; }
     .inst-head .btns .btn { flex: 1; }
-    .fields { grid-template-columns: 1fr 1fr; }
     .data th, .data td { padding: 9px 8px; }
     .hide-sm { display: none; }
+    .funds { grid-template-columns: 1fr; }
   }
 </style>
 </head>
 <body>
+
+<!-- login -->
+<div class="login" id="login" hidden>
+  <form class="login-card" id="login-form" autocomplete="off">
+    <svg width="40" height="40" viewBox="0 0 22 22" aria-hidden="true">
+      <path d="M3 18 L9 6 L13 13 L19 3" fill="none" stroke="#ff5722" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <h1>Log in to NEXUS-TRADE</h1>
+    <p>Paper trading on a simulated NIFTY50 market</p>
+    <div class="fld"><label>Your name</label><input id="login-name" maxlength="32" placeholder="e.g. Mahendra" required></div>
+    <button class="btn sell" type="submit" id="login-btn">Start trading</button>
+    <div class="err" id="login-err"></div>
+    <p class="fine muted">You get ₹10,00,000 of virtual funds with 5x intraday margin. No real money. Accounts reset when the server restarts.</p>
+  </form>
+</div>
 
 <header class="topbar">
   <div class="wrap">
@@ -212,10 +272,22 @@
     <nav>
       <a class="on" data-jump="top">Dashboard</a>
       <a data-jump="orders">Orders</a>
-      <a class="hide-sm" data-jump="trades">Trades</a>
+      <a class="hide-sm" data-jump="positions">Positions</a>
+      <a class="hide-sm" data-jump="funds">Funds</a>
       <a class="hide-sm" href="/docs" target="_blank" rel="noopener">API</a>
     </nav>
-    <div class="avatar">NT</div>
+    <div class="profile">
+      <button class="avatar" id="avatar" aria-haspopup="true" aria-expanded="false">–</button>
+      <div class="menu" id="menu" hidden>
+        <div class="menu-head"><b id="mn-name">–</b><span id="mn-id">–</span></div>
+        <div class="menu-funds num"><span>Available margin</span><b id="mn-avail">–</b></div>
+        <a data-jump="positions">Positions</a>
+        <a data-jump="orders">Orders</a>
+        <a data-jump="funds">Funds</a>
+        <a class="sep" id="mn-reset">Reset account</a>
+        <a id="mn-logout">Logout</a>
+      </div>
+    </div>
   </div>
 </header>
 
@@ -223,8 +295,7 @@
   <aside>
     <div class="search">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
-      <input placeholder="Search eg: nifty50" disabled>
-      <span class="count">1 / 50</span>
+      <input placeholder="NIFTY50 is the only instrument" disabled>
     </div>
 
     <div class="wl-row" id="wl-row">
@@ -258,12 +329,15 @@
         <div><span>Realized vol</span><b id="a-vol">–</b></div>
         <div><span>Z-score</span><b id="a-z">–</b></div>
         <div><span>Imbalance</span><b id="a-imb">–</b></div>
+        <div><span>Prev. close</span><b>24,500.00</b></div>
+        <div><span>Orders in</span><b id="a-orders">–</b></div>
+        <div><span>Trades</span><b id="a-trades">–</b></div>
       </div>
     </div>
 
     <div class="aside-foot">
-      <span>Price-time priority · FIFO</span>
-      <button class="linkbtn" id="reset">Reset book</button>
+      <span class="live"><i></i>Market live</span>
+      <span>Tick 0.05 · Circuit ±10%</span>
     </div>
   </aside>
 
@@ -280,27 +354,33 @@
     </div>
 
     <div class="card chart-card">
-      <div class="card-title"><h2>Trade price</h2><span id="chart-sub">last 200 trades</span></div>
+      <div class="card-title"><h2>Trade price</h2><span id="chart-sub">–</span></div>
       <svg id="chart" preserveAspectRatio="none"></svg>
     </div>
 
     <div class="card stats-row num">
-      <div><span>Orders received</span><b id="s-orders">–</b></div>
-      <div><span>Trades matched</span><b id="s-trades">–</b></div>
-      <div><span>Best bid</span><b id="s-bid">–</b></div>
-      <div><span>Best offer</span><b id="s-ask">–</b></div>
+      <div><span>Available margin</span><b id="s-avail">–</b></div>
+      <div><span>Used margin</span><b id="s-used">–</b></div>
+      <div><span>Today's P&amp;L</span><b id="s-pnl">–</b></div>
+      <div><span>Position</span><b id="s-pos">–</b></div>
     </div>
 
-    <div class="card">
-      <div class="tabs" style="padding:0 14px">
-        <a class="on" data-tab="orders" id="tab-orders">Open orders (0)</a>
-        <a data-tab="trades" id="tab-trades">Trade book</a>
+    <div class="card" id="tabs-card">
+      <div class="tabs">
+        <a class="on" data-tab="orders" id="tab-orders">Orders</a>
+        <a data-tab="positions" id="tab-positions">Positions</a>
+        <a data-tab="trades">Trades</a>
+        <a data-tab="funds">Funds</a>
+        <a data-tab="market">Market trades</a>
       </div>
       <div id="pane-orders"></div>
+      <div id="pane-positions" hidden></div>
       <div id="pane-trades" hidden></div>
+      <div id="pane-funds" hidden></div>
+      <div id="pane-market" hidden></div>
     </div>
 
-    <p class="disclaimer">Simulated exchange for learning. No real money or market data. Shortcuts: <kbd>B</kbd> buy, <kbd>S</kbd> sell, <kbd>Esc</kbd> close.</p>
+    <p class="disclaimer">Simulated exchange for learning: virtual money, simulated traders, no real market data. Shortcuts: <kbd>B</kbd> buy, <kbd>S</kbd> sell, <kbd>Esc</kbd> close.</p>
   </main>
 </div>
 
@@ -311,21 +391,20 @@
       <div class="t"><span id="ow-title">Buy NIFTY50</span><small id="ow-ltp"></small></div>
       <label class="switch" id="ow-switch" title="Switch side"><span class="track"><span class="knob"></span></span></label>
     </div>
-    <div class="ow-tabs"><a class="on">Regular</a></div>
+    <div class="ow-tabs"><a class="on">Regular</a><span class="tag mis">MIS · INTRADAY</span></div>
     <div class="ow-body">
       <div class="fields num">
-        <div class="fld"><label>Qty.</label><input type="number" id="qty" min="1" max="1000000" step="1" value="50"></div>
+        <div class="fld"><label>Qty.</label><input type="number" id="qty" min="1" max="100000" step="1" value="25"></div>
         <div class="fld"><label>Price</label><input type="number" id="price" min="0.05" step="0.05"></div>
-        <div class="fld"><label>Trader ID</label><input type="text" id="trader" maxlength="32" placeholder="optional"></div>
       </div>
       <div class="radios">
         <label><input type="radio" name="otype" value="MARKET"> Market</label>
         <label><input type="radio" name="otype" value="LIMIT" checked> Limit</label>
       </div>
-      <p class="ow-note" id="ow-note">Same trader ID on both sides turns on self-trade prevention.</p>
+      <p class="ow-note" id="ow-note"></p>
     </div>
     <div class="ow-foot">
-      <div class="info num">Value approx. <b id="ow-value">–</b></div>
+      <div class="info num">Margin required <b id="ow-margin">–</b><br>Available <b id="ow-avail">–</b></div>
       <button type="submit" class="btn buy" id="ow-submit">Buy</button>
       <button type="button" class="btn ghost" id="ow-cancel">Cancel</button>
     </div>
@@ -336,14 +415,28 @@
 
 <script>
 const $ = id => document.getElementById(id);
-const BASE = 24500;
+const PREV_CLOSE = 24500, MARGIN_RATE = 0.20, TICK = 0.05;
+const TOKEN_KEY = "nexus_token";
+const state = { side: "BUY", ltp: null, book: null, trades: [], me: null, seen: null };
+
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const fmt = (v, d = 2) => v === null || v === undefined || Number.isNaN(v) ? "–" :
   Number(v).toLocaleString("en-IN", { minimumFractionDigits: d, maximumFractionDigits: d });
-const state = { side: "BUY", ltp: null, book: null, trades: [] };
+const rupee = v => v === null || v === undefined ? "–" : (v < 0 ? "-₹" : "₹") + fmt(Math.abs(v));
+const signed = v => (v > 0 ? "+" : "") + fmt(v);
+const cls = v => v > 0.004 ? "up" : v < -0.004 ? "down" : "";
+const pct = v => { const r = Math.round(v * 100) / 100; return (r > 0 ? "+" : "") + (r === 0 ? "0.00" : fmt(r)) + "%"; };
+const time = ts => new Date(ts * 1000).toLocaleTimeString("en-GB");
+function getToken() { try { return localStorage.getItem(TOKEN_KEY); } catch { return null; } }
+function setToken(t) { try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch {} }
+let token = getToken();
 
 async function api(path, opts = {}) {
-  const res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers["X-Token"] = token;
+  const res = await fetch(path, { ...opts, headers });
   const body = await res.json().catch(() => ({}));
+  if (res.status === 401) { showLogin(); throw new Error("Please log in"); }
   if (!res.ok) {
     const d = body.detail;
     throw new Error(Array.isArray(d) ? d.map(e => e.msg).join("; ") : (d || res.statusText));
@@ -352,36 +445,72 @@ async function api(path, opts = {}) {
 }
 
 let toastTimer;
-function toast(title, text, err = false) {
+function toast(title, text, kind = "") {
   const t = $("toast");
-  t.className = "toast show" + (err ? " err" : "");
-  t.innerHTML = `<b>${title}</b>${text || ""}`;
+  t.className = "toast show " + kind;
+  t.innerHTML = `<b>${esc(title)}</b>${esc(text || "")}`;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.className = "toast" + (err ? " err" : ""), 3200);
+  toastTimer = setTimeout(() => t.className = "toast " + kind, 3600);
 }
 
-// rendering
+// ── login / profile ────────────────────────────
+function showLogin() {
+  token = null; setToken(null); state.me = null; state.seen = null;
+  $("login").hidden = false; $("login-name").focus();
+}
+$("login-form").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  $("login-btn").disabled = true; $("login-err").textContent = "";
+  try {
+    const r = await api("/api/login", { method: "POST", body: JSON.stringify({ name: $("login-name").value.trim() }) });
+    token = r.token; setToken(token);
+    $("login").hidden = true;
+    renderMe(r);
+    toast(`Welcome, ${r.user.name}`, "₹10,00,000 virtual funds added to your account.", "info");
+    refreshAll();
+  } catch (e) { $("login-err").textContent = e.message; }
+  $("login-btn").disabled = false;
+});
+
+const initials = n => n.split(/\s+/).filter(Boolean).slice(0, 2).map(w => w[0]).join("").toUpperCase() || "?";
+$("avatar").addEventListener("click", e => {
+  e.stopPropagation();
+  const m = $("menu"); m.hidden = !m.hidden;
+  $("avatar").setAttribute("aria-expanded", String(!m.hidden));
+});
+document.addEventListener("click", e => { if (!e.target.closest(".profile")) $("menu").hidden = true; });
+$("mn-logout").addEventListener("click", () => {
+  if (!confirm("Log out? This paper account can't be opened again after logout.")) return;
+  $("menu").hidden = true; showLogin();
+});
+$("mn-reset").addEventListener("click", async () => {
+  if (!confirm("Reset account? Open orders are cancelled, the position is cleared and funds go back to ₹10,00,000.")) return;
+  $("menu").hidden = true;
+  try { renderMe(await api("/api/account/reset", { method: "POST" })); state.seen = null; toast("Account reset", "Funds back to ₹10,00,000.", "info"); }
+  catch (e) { toast("Reset failed", e.message, "err"); }
+});
+
+// ── market rendering ───────────────────────────
 function setPrice() {
   const p = state.ltp;
-  const chg = p ? p - BASE : null, pct = p ? chg / BASE * 100 : null;
-  const cls = !p || chg === 0 ? "" : chg > 0 ? "up" : "down";
-  const sign = chg >= 0 ? "+" : "";
-  $("tk-ltp").textContent = fmt(p); $("tk-ltp").className = cls;
-  $("wl-ltp").textContent = fmt(p); $("wl-ltp").className = "ltp num " + cls;
+  const chg = p ? p - PREV_CLOSE : null, pc = p ? chg / PREV_CLOSE * 100 : null;
+  const c = p ? cls(chg) : "";
+  $("tk-ltp").textContent = fmt(p); $("tk-ltp").className = c;
+  $("wl-ltp").textContent = fmt(p); $("wl-ltp").className = "ltp num " + c;
   $("m-ltp").textContent = fmt(p);
-  $("tk-chg").textContent = p ? `${sign}${fmt(pct)}%` : "";
-  $("wl-chg").textContent = p ? `${sign}${fmt(pct)}%` : "–";
-  $("m-chg").textContent = p ? `${sign}${fmt(chg)} (${sign}${fmt(pct)}%)` : "";
-  $("m-chg").className = cls;
+  $("tk-chg").textContent = p ? pct(pc) : "";
+  $("wl-chg").textContent = p ? pct(pc) : "–";
+  $("m-chg").textContent = p ? `${signed(chg)} (${pct(pc)})` : "";
+  $("m-chg").className = c;
   $("ow-ltp").textContent = p ? `₹${fmt(p)}` : "";
 }
 
-function depthRows(levels, cls) {
+function depthRows(levels, cl) {
   const rows = [];
   for (let i = 0; i < 5; i++) {
     const l = levels[i];
-    rows.push(l ? `<tr class="${cls}"><td>${fmt(l.price)}</td><td>${l.orders}</td><td>${l.quantity.toLocaleString("en-IN")}</td></tr>`
-                : `<tr class="${cls} empty"><td>0.00</td><td>0</td><td>0</td></tr>`);
+    rows.push(l ? `<tr class="${cl}"><td>${fmt(l.price)}</td><td>${l.orders}</td><td>${l.quantity.toLocaleString("en-IN")}</td></tr>`
+                : `<tr class="${cl} empty"><td>0.00</td><td>0</td><td>0</td></tr>`);
   }
   const tot = levels.reduce((s, l) => s + l.quantity, 0);
   rows.push(`<tr class="total"><td>Total</td><td></td><td>${tot.toLocaleString("en-IN")}</td></tr>`);
@@ -393,8 +522,6 @@ async function refreshBook() {
   $("bids").innerHTML = depthRows(b.bids, "bid");
   $("asks").innerHTML = depthRows(b.asks, "ask");
   $("tk-spread").textContent = fmt(b.spread);
-  $("s-bid").textContent = fmt(b.best_bid);
-  $("s-ask").textContent = fmt(b.best_ask);
 }
 
 function drawChart() {
@@ -403,17 +530,16 @@ function drawChart() {
   svg.setAttribute("viewBox", `0 0 ${W} ${H}`);
   const pts = [...state.trades].reverse().map(t => t.price);
   if (pts.length < 2) {
-    svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle">Place a crossing order to see trades here</text>`;
+    svg.innerHTML = `<text x="${W / 2}" y="${H / 2}" text-anchor="middle">Waiting for trades…</text>`;
     $("chart-sub").textContent = "no trades yet";
     return;
   }
   let lo = Math.min(...pts), hi = Math.max(...pts);
-  if (hi - lo < 1) { lo -= .5; hi += .5; }
+  if (hi - lo < 1) { const m = (hi + lo) / 2; lo = m - .5; hi = m + .5; }
   const x = i => padL + i * (W - padL - padR) / (pts.length - 1);
   const y = p => padT + (hi - p) * (H - padT - padB) / (hi - lo);
   const up = pts[pts.length - 1] >= pts[0];
-  const col = up ? "var(--up)" : "var(--down)";
-  const hex = up ? "#4caf50" : "#e25f5b";
+  const col = up ? "var(--up)" : "var(--down)", hex = up ? "#4caf50" : "#e25f5b";
   const line = pts.map((p, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(p).toFixed(1)}`).join("");
   const area = `${line}L${x(pts.length - 1).toFixed(1)},${H - padB}L${padL},${H - padB}Z`;
   const grid = [0, .25, .5, .75, 1].map(f => {
@@ -421,15 +547,19 @@ function drawChart() {
     return `<line x1="${padL}" x2="${W - padR}" y1="${yy}" y2="${yy}" stroke="var(--line)"/>
             <text x="${W - padR + 8}" y="${yy + 4}">${fmt(p)}</text>`;
   }).join("");
-  const last = pts[pts.length - 1];
+  let avgLine = "";
+  const pos = state.me && state.me.position;
+  if (pos && pos.quantity && pos.avg_price >= lo && pos.avg_price <= hi) {
+    const yy = y(pos.avg_price);
+    avgLine = `<line x1="${padL}" x2="${W - padR}" y1="${yy}" y2="${yy}" stroke="var(--buy)" stroke-dasharray="4 4"/>
+               <text x="${padL + 4}" y="${yy - 5}" style="fill:var(--buy)">your avg ${fmt(pos.avg_price)}</text>`;
+  }
   svg.innerHTML = `
     <defs><linearGradient id="g" x1="0" x2="0" y1="0" y2="1">
-      <stop offset="0" stop-color="${hex}" stop-opacity=".18"/>
-      <stop offset="1" stop-color="${hex}" stop-opacity="0"/></linearGradient></defs>
-    ${grid}
-    <path d="${area}" fill="url(#g)"/>
-    <path d="${line}" fill="none" stroke="${col}" stroke-width="1.6"/>
-    <circle cx="${x(pts.length - 1)}" cy="${y(last)}" r="3.2" fill="${col}"/>`;
+      <stop offset="0" stop-color="${hex}" stop-opacity=".18"/><stop offset="1" stop-color="${hex}" stop-opacity="0"/></linearGradient></defs>
+    ${grid}<path d="${area}" fill="url(#g)"/>
+    <path d="${line}" fill="none" stroke="${col}" stroke-width="1.6"/>${avgLine}
+    <circle cx="${x(pts.length - 1)}" cy="${y(pts[pts.length - 1])}" r="3.2" fill="${col}"/>`;
   $("chart-sub").textContent = `last ${pts.length} trades`;
 }
 
@@ -438,11 +568,9 @@ async function refreshTrades() {
   state.ltp = state.trades.length ? state.trades[0].price : (state.book && state.book.mid);
   setPrice();
   drawChart();
-  $("pane-trades").innerHTML = state.trades.length ? `<table class="data num">
-    <thead><tr><th>Time</th><th>Trade ID</th><th class="hide-sm">Buy order</th><th class="hide-sm">Sell order</th><th class="r">Qty.</th><th class="r">Price</th></tr></thead>
-    <tbody>${state.trades.slice(0, 50).map(t => `<tr>
-      <td>${new Date(t.timestamp * 1000).toLocaleTimeString("en-GB")}</td><td>${t.trade_id}</td>
-      <td class="hide-sm">${t.buy_order_id}</td><td class="hide-sm">${t.sell_order_id}</td>
+  $("pane-market").innerHTML = state.trades.length ? `<table class="data num">
+    <thead><tr><th>Time</th><th>Trade ID</th><th class="r">Qty.</th><th class="r">Price</th></tr></thead>
+    <tbody>${state.trades.slice(0, 40).map(t => `<tr><td>${time(t.timestamp)}</td><td>${t.trade_id}</td>
       <td class="r">${t.quantity}</td><td class="r">${fmt(t.price)}</td></tr>`).join("")}</tbody></table>`
     : `<div class="empty-state">No trades yet</div>`;
 }
@@ -455,32 +583,117 @@ async function refreshAnalytics() {
   $("a-vol").textContent = fmt(a.realized_vol_pct) + "%";
   $("a-z").textContent = fmt(a.z_score, 3);
   $("a-imb").textContent = fmt(a.imbalance, 3);
-  $("s-orders").textContent = a.stats.orders_received.toLocaleString("en-IN");
-  $("s-trades").textContent = a.stats.trades_matched.toLocaleString("en-IN");
+  $("a-orders").textContent = a.stats.orders_received.toLocaleString("en-IN");
+  $("a-trades").textContent = a.stats.trades_matched.toLocaleString("en-IN");
 }
 
-async function refreshOrders() {
-  const o = await api("/api/orders?limit=200");
-  $("tab-orders").textContent = `Open orders (${o.length})`;
-  $("pane-orders").innerHTML = o.length ? `<table class="data num">
-    <thead><tr><th>Type</th><th>Instrument</th><th class="hide-sm">Order ID</th><th class="r">Qty.</th><th class="r">Price</th><th class="r hide-sm">Status</th><th></th></tr></thead>
-    <tbody>${o.slice().reverse().map(x => `<tr>
-      <td><span class="tag ${x.side.toLowerCase()}">${x.side}</span></td><td>NIFTY50</td>
-      <td class="hide-sm">${x.order_id}</td><td class="r">${x.quantity}</td><td class="r">${fmt(x.price)}</td>
-      <td class="r hide-sm"><span class="tag open">OPEN</span></td>
-      <td class="r"><button class="cancel-x" data-cancel="${x.order_id}">Cancel</button></td></tr>`).join("")}</tbody></table>`
-    : `<div class="empty-state">No open orders. Limit orders that don't fill right away show up here.</div>`;
+// ── account rendering ──────────────────────────
+function ordersTable(list, open) {
+  if (!list.length) return `<div class="empty-state">${open ? "No open orders" : "No executed orders yet. Press B or S to place one."}</div>`;
+  return `<table class="data num"><thead><tr><th>Time</th><th>Type</th><th>Instrument</th><th class="hide-sm">Product</th>
+    <th class="r">Qty.</th><th class="r">${open ? "Price" : "Avg. price"}</th><th>Status</th>${open ? "<th></th>" : ""}</tr></thead><tbody>
+    ${list.map(o => `<tr>
+      <td>${time(o.timestamp)}</td>
+      <td><span class="tag ${o.side.toLowerCase()}">${o.side}</span></td>
+      <td>NIFTY50 <span class="muted hide-sm" style="font-size:11px">${o.order_type}</span></td>
+      <td class="hide-sm"><span class="tag mis">MIS</span></td>
+      <td class="r">${o.filled} / ${o.quantity}</td>
+      <td class="r">${open ? fmt(o.price) : (o.avg_price ? fmt(o.avg_price) : (o.price ? fmt(o.price) : "MKT"))}</td>
+      <td><span class="tag ${o.status}">${o.status}</span>${o.message && !open ? `<span class="msg">${esc(o.message)}</span>` : ""}</td>
+      ${open ? `<td class="r"><button class="rowbtn" data-cancel="${o.order_id}">Cancel</button></td>` : ""}</tr>`).join("")}
+    </tbody></table>`;
 }
+
+function renderMe(me) {
+  state.me = me;
+  const f = me.funds, p = me.position;
+  $("avatar").textContent = initials(me.user.name);
+  $("mn-name").textContent = me.user.name;
+  $("mn-id").textContent = me.user.id;
+  $("mn-avail").textContent = rupee(f.available_margin);
+  $("s-avail").textContent = rupee(f.available_margin);
+  $("s-used").textContent = rupee(f.used_margin);
+  $("s-pnl").textContent = (f.total_pnl > 0 ? "+" : "") + rupee(f.total_pnl);
+  $("s-pnl").className = cls(f.total_pnl);
+  $("s-pos").textContent = p.quantity ? `${p.quantity > 0 ? "+" : ""}${p.quantity}` : "0";
+  $("s-pos").className = p.quantity > 0 ? "up" : p.quantity < 0 ? "down" : "";
+
+  const open = me.orders.filter(o => o.status === "OPEN");
+  const done = me.orders.filter(o => o.status !== "OPEN");
+  $("tab-orders").textContent = open.length ? `Orders (${open.length})` : "Orders";
+  $("pane-orders").innerHTML =
+    `<div class="sub">Open orders <small>(${open.length})</small></div>${ordersTable(open, true)}
+     <div class="sub" style="margin-top:10px">Executed orders <small>(${done.length})</small></div>${ordersTable(done, false)}`;
+
+  const hasPos = p.quantity !== 0 || p.realized_pnl !== 0;
+  $("tab-positions").textContent = p.quantity ? "Positions (1)" : "Positions";
+  $("pane-positions").innerHTML = hasPos ? `<table class="data num"><thead><tr><th class="hide-sm">Product</th><th>Instrument</th>
+      <th class="r">Qty.</th><th class="r">Avg.</th><th class="r">LTP</th><th class="r">P&amp;L</th><th></th></tr></thead><tbody>
+      <tr class="${p.quantity ? "" : "closed"}">
+        <td class="hide-sm"><span class="tag mis">MIS</span></td><td>NIFTY50</td>
+        <td class="r ${p.quantity > 0 ? "up" : p.quantity < 0 ? "down" : ""}">${p.quantity}</td>
+        <td class="r">${p.quantity ? fmt(p.avg_price) : "–"}</td><td class="r">${fmt(p.ltp)}</td>
+        <td class="r ${cls(p.pnl)}">${signed(p.pnl)}</td>
+        <td class="r">${p.quantity ? `<button class="rowbtn" id="exit-pos">Exit</button>` : ""}</td></tr>
+      <tr class="total"><td class="hide-sm"></td><td colspan="4">Total P&amp;L
+        <span class="muted" style="font-weight:400;font-size:12px">· realised ${signed(p.realized_pnl)} · unrealised ${signed(p.unrealized_pnl)}</span></td>
+        <td class="r ${cls(p.pnl)}">${signed(p.pnl)}</td><td></td></tr></tbody></table>`
+    : `<div class="empty-state">You don't have any positions yet</div>`;
+
+  $("pane-trades").innerHTML = me.trades.length ? `<table class="data num"><thead><tr><th>Trade ID</th><th>Fill time</th><th>Type</th>
+      <th>Instrument</th><th class="r">Qty.</th><th class="r">Price</th></tr></thead><tbody>
+      ${me.trades.slice(0, 60).map(t => `<tr><td>${t.trade_id}</td><td>${time(t.timestamp)}</td>
+        <td><span class="tag ${t.side.toLowerCase()}">${t.side}</span></td><td>NIFTY50</td>
+        <td class="r">${t.quantity}</td><td class="r">${fmt(t.price)}</td></tr>`).join("")}</tbody></table>`
+    : `<div class="empty-state">No trades yet</div>`;
+
+  $("pane-funds").innerHTML = `<div class="funds num">
+      <div class="big"><span>Available margin</span><b>${rupee(f.available_margin)}</b></div>
+      <div>
+        <div class="line"><span>Opening balance</span><b>${rupee(f.opening_balance)}</b></div>
+        <div class="line"><span>Used margin</span><b>${rupee(f.used_margin)}</b></div>
+        <div class="line"><span>Account value</span><b>${rupee(f.equity)}</b></div>
+      </div>
+      <div>
+        <div class="line"><span>Realised P&amp;L</span><b class="${cls(f.realized_pnl)}">${signed(f.realized_pnl)}</b></div>
+        <div class="line"><span>Unrealised P&amp;L</span><b class="${cls(f.unrealized_pnl)}">${signed(f.unrealized_pnl)}</b></div>
+        <div class="line"><span>Margin (MIS)</span><b>${Math.round(f.margin_rate * 100)}% · ${Math.round(1 / f.margin_rate)}x</b></div>
+      </div></div>`;
+
+  // toast when a resting order fills in the background
+  const now = new Map(me.orders.map(o => [o.order_id, o]));
+  if (state.seen) {
+    for (const [id, o] of now) {
+      const before = state.seen.get(id);
+      if (before && before.status === "OPEN" && o.filled > before.filled) {
+        toast(o.status === "COMPLETE" ? "Order executed" : "Order partially filled",
+          `${o.side} ${o.filled}/${o.quantity} NIFTY50 @ ${fmt(o.avg_price)}`);
+      }
+    }
+  }
+  state.seen = new Map([...now].map(([id, o]) => [id, { status: o.status, filled: o.filled }]));
+  syncOW();
+}
+
+async function refreshMe() { if (token) renderMe(await api("/api/me")); }
 
 async function refreshAll() {
   try {
     await refreshBook();
-    await Promise.all([refreshTrades(), refreshAnalytics(), refreshOrders()]);
-  } catch (e) { toast("Can't reach the server", e.message, true); }
+    await Promise.all([refreshTrades(), refreshAnalytics(), refreshMe()]);
+  } catch (e) { if (token) toast("Can't reach the server", e.message, "err"); }
 }
 
-// order window
+// ── order window ───────────────────────────────
 const otype = () => document.querySelector("input[name=otype]:checked").value;
+function marginNeeded(side, qty) {
+  const me = state.me; if (!me) return null;
+  const ref = state.ltp || PREV_CLOSE;
+  const open = s => me.orders.filter(o => o.status === "OPEN" && o.side === s).reduce((a, o) => a + o.pending, 0);
+  const pos = me.position.quantity, ob = open("BUY"), os = open("SELL");
+  const m = (b, s) => Math.max(pos + b, s - pos, 0) * ref * MARGIN_RATE;
+  return Math.max(0, m(ob + (side === "BUY" ? qty : 0), os + (side === "SELL" ? qty : 0)) - m(ob, os));
+}
 function syncOW() {
   const buy = state.side === "BUY";
   $("ow").className = "ow " + (buy ? "buy" : "sell");
@@ -489,16 +702,20 @@ function syncOW() {
   $("ow-submit").className = "btn " + (buy ? "buy" : "sell");
   $("price").disabled = otype() === "MARKET";
   const q = parseInt($("qty").value, 10) || 0;
-  const p = otype() === "MARKET" ? state.ltp : parseFloat($("price").value);
-  $("ow-value").textContent = p && q ? "₹" + fmt(p * q) : "–";
+  const need = marginNeeded(state.side, q);
+  $("ow-margin").textContent = need === null ? "–" : rupee(need);
+  $("ow-avail").textContent = state.me ? rupee(state.me.funds.available_margin) : "–";
 }
-function openOW(side) {
+function openOW(side, opts = {}) {
+  if (!token) return showLogin();
   state.side = side;
   const b = state.book;
   const ref = b ? (side === "BUY" ? b.best_ask : b.best_bid) : null;
-  $("price").value = (ref || state.ltp || BASE).toFixed(2);
+  $("price").value = (ref || state.ltp || PREV_CLOSE).toFixed(2);
+  if (opts.qty) $("qty").value = opts.qty;
+  document.querySelector(`input[name=otype][value=${opts.market ? "MARKET" : "LIMIT"}]`).checked = true;
   $("ow-note").className = "ow-note";
-  $("ow-note").textContent = "Same trader ID on both sides turns on self-trade prevention.";
+  $("ow-note").textContent = opts.note || "Intraday (MIS): 20% margin. Short selling is allowed if you have the margin.";
   syncOW();
   $("backdrop").classList.add("open");
   setTimeout(() => $("qty").select(), 30);
@@ -517,57 +734,67 @@ $("ow").addEventListener("submit", async ev => {
     side: state.side, order_type: otype(),
     quantity: parseInt($("qty").value, 10),
     price: otype() === "LIMIT" ? parseFloat($("price").value) : null,
-    trader_id: $("trader").value.trim() || null,
   };
   $("ow-submit").disabled = true;
   try {
-    const r = await api("/api/orders", { method: "POST", body: JSON.stringify(body) });
-    closeOW();
-    let text = r.filled ? `Filled ${r.filled} in ${r.trades.length} trade${r.trades.length === 1 ? "" : "s"}.` : "Nothing filled yet.";
-    if (r.resting) text += ` ${r.unfilled} open as ${r.order_id}.`;
-    else if (r.unfilled) text += ` ${r.unfilled} cancelled (not enough liquidity).`;
-    toast(`${body.side === "BUY" ? "Buy" : "Sell"} order ${r.filled ? "executed" : "placed"}`, text);
-  } catch (e) {
-    $("ow-note").className = "ow-note err"; $("ow-note").textContent = e.message;
-  }
+    const o = await api("/api/orders", { method: "POST", body: JSON.stringify(body) });
+    const what = `${o.side} ${o.quantity} NIFTY50`;
+    if (o.status === "REJECTED") {
+      $("ow-note").className = "ow-note err"; $("ow-note").textContent = "Rejected: " + o.message;
+      toast("Order rejected", o.message, "err");
+    } else {
+      closeOW();
+      if (o.status === "COMPLETE") toast("Order executed", `${what} @ avg ${fmt(o.avg_price)}`);
+      else if (o.status === "OPEN") toast(o.filled ? "Order partially filled" : "Order placed",
+        o.filled ? `${o.filled}/${o.quantity} filled, rest open at ${fmt(o.price)}` : `${what} @ ${fmt(o.price)} is open`, "info");
+      else toast(o.filled ? "Order partially filled" : "Order cancelled",
+        (o.filled ? `${o.filled}/${o.quantity} filled @ avg ${fmt(o.avg_price)}. ` : "") + o.message, o.filled ? "" : "err");
+    }
+  } catch (e) { $("ow-note").className = "ow-note err"; $("ow-note").textContent = e.message; }
   $("ow-submit").disabled = false;
   refreshAll();
 });
 
-// other controls
-$("pane-orders").addEventListener("click", async ev => {
+// ── other controls ─────────────────────────────
+$("tabs-card").addEventListener("click", async ev => {
   const id = ev.target.dataset.cancel;
-  if (!id) return;
-  try { await api(`/api/orders/${id}`, { method: "DELETE" }); toast("Order cancelled", id); }
-  catch (e) { toast("Cancel failed", e.message, true); }
-  refreshAll();
+  if (id) {
+    try { await api(`/api/orders/${id}`, { method: "DELETE" }); toast("Order cancelled", `Order ${id}`, "info"); }
+    catch (e) { toast("Cancel failed", e.message, "err"); }
+    return refreshAll();
+  }
+  if (ev.target.id === "exit-pos" && state.me) {
+    const q = state.me.position.quantity;
+    openOW(q > 0 ? "SELL" : "BUY", { qty: Math.abs(q), market: true, note: `Exit: ${q > 0 ? "sell" : "buy back"} ${Math.abs(q)} at market to close the position.` });
+  }
 });
-document.querySelectorAll("[data-tab]").forEach(t => t.addEventListener("click", () => {
-  document.querySelectorAll("[data-tab]").forEach(x => x.classList.toggle("on", x === t));
-  $("pane-orders").hidden = t.dataset.tab !== "orders";
-  $("pane-trades").hidden = t.dataset.tab !== "trades";
-}));
+function showTab(name) {
+  document.querySelectorAll("[data-tab]").forEach(x => x.classList.toggle("on", x.dataset.tab === name));
+  for (const p of ["orders", "positions", "trades", "funds", "market"]) $("pane-" + p).hidden = p !== name;
+}
+document.querySelectorAll("[data-tab]").forEach(t => t.addEventListener("click", () => showTab(t.dataset.tab)));
 document.querySelectorAll("[data-jump]").forEach(a => a.addEventListener("click", () => {
-  document.querySelectorAll("[data-jump]").forEach(x => x.classList.toggle("on", x === a));
   const j = a.dataset.jump;
+  document.querySelectorAll("nav [data-jump]").forEach(x => x.classList.toggle("on", x.dataset.jump === j));
+  $("menu").hidden = true;
   if (j === "top") { window.scrollTo({ top: 0, behavior: "smooth" }); return; }
-  document.querySelector(`[data-tab=${j}]`).click();
-  $("pane-" + j).parentElement.scrollIntoView({ behavior: "smooth", block: "start" });
+  showTab(j);
+  $("tabs-card").scrollIntoView({ behavior: "smooth", block: "start" });
 }));
 $("toggle-depth").addEventListener("click", e => { e.stopPropagation(); $("depth").hidden = !$("depth").hidden; });
 $("wl-row").addEventListener("click", () => { $("depth").hidden = !$("depth").hidden; });
-$("reset").addEventListener("click", async () => { await api("/api/reset", { method: "POST" }); toast("Book reset", "Seeded with 5 levels each side."); refreshAll(); });
 
 document.addEventListener("keydown", e => {
-  if (e.key === "Escape") return closeOW();
-  if (e.target.matches("input") || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.key === "Escape") { $("menu").hidden = true; return closeOW(); }
+  if (e.target.matches("input") || e.metaKey || e.ctrlKey || e.altKey || !$("login").hidden) return;
   if (e.key === "b" || e.key === "B") { e.preventDefault(); openOW("BUY"); }
   if (e.key === "s" || e.key === "S") { e.preventDefault(); openOW("SELL"); }
 });
 window.addEventListener("resize", drawChart);
 
+if (!token) showLogin();
 refreshAll();
-setInterval(() => { if (!document.hidden) refreshAll(); }, 2000);
+setInterval(() => { if (!document.hidden) refreshAll(); }, 1500);
 </script>
 </body>
 </html>

@@ -37,12 +37,24 @@ class Order:
     order_type: str = 'LIMIT'   # 'LIMIT' or 'MARKET'
     trader_id:  Optional[str] = None   # used for self-trade prevention (STP)
     timestamp:  float = field(default_factory=time.time)
+    # Lifecycle. `quantity` is the open (unfilled) quantity and shrinks as
+    # the order fills; `original_qty` keeps what was asked for.
+    original_qty: int = 0
+    filled_qty:   int = 0
+    status:       str = 'NEW'    # NEW, OPEN, COMPLETE, CANCELLED, REJECTED
+    message:      str = ''       # reason for CANCELLED / REJECTED
 
     def __post_init__(self):
+        if self.side not in ('BUY', 'SELL'):
+            raise ValueError(f"Order side must be BUY or SELL, got {self.side}")
+        if self.order_type not in ('LIMIT', 'MARKET'):
+            raise ValueError(f"Order type must be LIMIT or MARKET, got {self.order_type}")
         if self.quantity <= 0:
             raise ValueError(f"Order quantity must be > 0, got {self.quantity}")
-        if self.order_type == 'LIMIT' and self.price is not None and self.price <= 0:
+        if self.order_type == 'LIMIT' and (self.price is None or self.price <= 0):
             raise ValueError(f"LIMIT order price must be > 0, got {self.price}")
+        if not self.original_qty:
+            self.original_qty = self.quantity
 
     def __repr__(self):
         price_str = f"{self.price:.2f}" if self.price is not None else "MKT"
@@ -125,30 +137,6 @@ class PriceLevel:
         """O(1) removal of any node. This is what makes cancel O(1)."""
         self._unlink(node)
 
-    def remove_specific(self, order_id: str) -> Optional['Order']:
-        """Remove and return the order with this order_id.
-
-        Self-trade prevention can fully fill an order that is not at the
-        head, because the head was skipped as the incoming trader's own
-        order. Cost is O(k), where k is the order's position in the queue;
-        in practice the target is at or near the head."""
-        node = self.head
-        while node is not None:
-            if node.order.order_id == order_id:
-                order = node.order
-                self._unlink(node)
-                return order
-            node = node.next
-        return None
-
-    def find_node(self, order_id: str) -> Optional[_Node]:
-        node = self.head
-        while node is not None:
-            if node.order.order_id == order_id:
-                return node
-            node = node.next
-        return None
-
     def _unlink(self, node: _Node) -> None:
         if node.prev is not None:
             node.prev.next = node.next
@@ -191,8 +179,9 @@ class OrderBook:
     list node as well lets PriceLevel.remove_node unlink the order in O(1),
     whatever the queue length or the order's position.
     """
-    def __init__(self, symbol: str):
+    def __init__(self, symbol: str, tick_size: Optional[float] = None):
         self.symbol    = symbol
+        self.tick_size = tick_size
         self.bids      = SortedDict(lambda p: -p)   # max-first
         self.asks      = SortedDict()               # min-first
         self.order_map: dict[str, tuple[str, float, _Node]] = {}
@@ -211,6 +200,20 @@ class OrderBook:
     def mid_price(self) -> Optional[float]:
         bb, ba = self.best_bid(), self.best_ask()
         return round((bb + ba) / 2, 2) if (bb and ba) else None
+
+    def normalize_price(self, price: float) -> float:
+        """Snap a limit price to a clean float key.
+
+        Prices are dict keys, so 0.1 + 0.2 and 0.3 must not become two
+        levels. With a tick size, the price must be a whole number of
+        ticks (NSE equities use 0.05) or the order is rejected."""
+        if self.tick_size is None:
+            return round(price, 8)
+        ticks = round(price / self.tick_size)
+        if ticks <= 0 or abs(ticks * self.tick_size - price) > 1e-6:
+            raise ValueError(f"Price must be a multiple of the tick size "
+                             f"{self.tick_size}, got {price}")
+        return round(ticks * self.tick_size, 8)
 
     # ── helpers ─────────────────────────────────────────────
     def _get_or_create_level(self, side: str, price: float) -> PriceLevel:
@@ -246,6 +249,8 @@ class OrderBook:
         if price in book:
             book[price].remove_node(node)
             self._cleanup_level(side, price)
+        node.order.status = 'CANCELLED'
+        node.order.message = 'Cancelled by user'
         return True
 
     # ── display ─────────────────────────────────────────────
@@ -302,9 +307,11 @@ class MatchingEngine:
             'total_latency_ns': 0,
         }
 
-    def add_symbol(self, symbol: str):
-        self.books[symbol] = OrderBook(symbol)
-        print(f"  [Engine] Symbol added: {symbol}")
+    def add_symbol(self, symbol: str, tick_size: Optional[float] = None,
+                   verbose: bool = True):
+        self.books[symbol] = OrderBook(symbol, tick_size)
+        if verbose:
+            print(f"  [Engine] Symbol added: {symbol}")
 
     def on_trade(self, callback):
         """Observer pattern: register a callback for every trade."""
@@ -312,13 +319,24 @@ class MatchingEngine:
 
     # ── main entry point ────────────────────────────────────
     def submit_order(self, order: Order) -> list[Trade]:
+        """Match an order and return the trades it produced.
+
+        Raises ValueError for an unknown symbol or an off-tick price; the
+        order is then marked REJECTED and the book is untouched."""
         t0 = time.perf_counter_ns()
-        self._stats['orders_received'] += 1
 
         if order.symbol not in self.books:
-            raise ValueError(f"Unknown symbol: {order.symbol}")
+            order.status, order.message = 'REJECTED', f"Unknown symbol: {order.symbol}"
+            raise ValueError(order.message)
+        book = self.books[order.symbol]
+        if order.order_type == 'LIMIT':
+            try:
+                order.price = book.normalize_price(order.price)
+            except ValueError as exc:
+                order.status, order.message = 'REJECTED', str(exc)
+                raise
 
-        book   = self.books[order.symbol]
+        self._stats['orders_received'] += 1
         trades = (self._match_market(book, order)
                   if order.order_type == 'MARKET'
                   else self._match_limit(book, order))
@@ -341,134 +359,95 @@ class MatchingEngine:
             return False
         return self.books[symbol].cancel(order_id)
 
-    @staticmethod
-    def _peek_after(level: 'PriceLevel', order: 'Order') -> Optional['Order']:
-        """Return the order after `order` in `level`, or None if it is
-        last. Used by self-trade prevention to look past a skipped order."""
-        node = level.find_node(order.order_id)
-        if node is None or node.next is None:
-            return None
-        return node.next.order
-
     # ── limit order matching ─────────────────────────────────
     def _match_limit(self, book: OrderBook, order: Order, rest_unfilled: bool = True) -> list[Trade]:
         """Price-time priority matching loop.
 
-        rest_unfilled: True for LIMIT orders, so any quantity left after
-        walking the book rests as a new order. False for MARKET orders, so
-        the leftover is dropped. A market order must never rest at a
-        stand-in price like +inf or 0, because that would corrupt
-        best_bid() and best_ask().
+        Walks the opposite side from the best price. Within a level, orders
+        fill oldest first. Trades print at the resting order's price.
+
+        Self-trade prevention (STP): a resting order with the same
+        trader_id as the incoming order is skipped, however many of them
+        there are, and matching carries on with the next order and the
+        next price level. Exchanges enforce this (NSE STP, CME self-match
+        prevention) because self-trades inflate volume and can be used for
+        wash trading. Orders without a trader_id never trigger STP.
+
+        rest_unfilled: True for LIMIT orders, so leftover quantity rests.
+        False for MARKET orders (Immediate-or-Cancel), so it is dropped.
+        A leftover LIMIT quantity that still crosses the book (only
+        possible when the crossing orders are the trader's own) is
+        cancelled instead of rested, so the book can never end up with
+        best bid >= best ask.
         """
-        trades         = []
-        remaining_qty  = order.quantity
+        trades    = []
+        buy       = order.side == 'BUY'
+        opposite  = book.asks if buy else book.bids
+        remaining = order.quantity
+        stp       = order.trader_id is not None
+        idx       = 0      # index of the price level being matched
 
-        if order.side == 'BUY':
-            # Walk up asks from lowest price
-            while remaining_qty > 0 and book.best_ask() is not None:
-                best_ask = book.best_ask()
-                if best_ask > order.price:
-                    break      # price condition not met → stop
+        while remaining > 0 and idx < len(opposite):
+            price, level = opposite.peekitem(idx)
+            if (buy and price > order.price) or (not buy and price < order.price):
+                break      # no longer crosses
 
-                ask_level  = book.asks[best_ask]
-                ask_order  = ask_level.peek_front()
+            node = level.head
+            while node is not None and remaining > 0:
+                resting = node.order
+                nxt = node.next
+                if stp and resting.trader_id == order.trader_id:
+                    node = nxt          # skip own order, keep its place in the queue
+                    continue
 
-                # Self-trade prevention (STP): an incoming order never
-                # matches a resting order from the same trader. Exchanges
-                # enforce this (e.g. NSE STP, CME self-match prevention)
-                # because self-trades inflate volume and can be used for
-                # wash trading. The resting order is skipped and the next
-                # order at this price is tried. If either side has no
-                # trader_id, STP does not apply, so the demo and older
-                # tests behave as before.
-                if (order.trader_id is not None
-                        and ask_order.trader_id is not None
-                        and order.trader_id == ask_order.trader_id):
-                    next_order = self._peek_after(ask_level, ask_order)
-                    if next_order is None:
-                        break  # nothing else to match at this price level
-                    ask_order = next_order
-
-                fill_qty   = min(remaining_qty, ask_order.quantity)
-                fully_filled = fill_qty == ask_order.quantity
-
+                fill = min(remaining, resting.quantity)
                 trades.append(Trade(
                     trade_id      = str(uuid.uuid4())[:8].upper(),
                     symbol        = order.symbol,
-                    buy_order_id  = order.order_id,
-                    sell_order_id = ask_order.order_id,
-                    price         = best_ask,   # passive side's price
-                    quantity      = fill_qty,
+                    buy_order_id  = order.order_id if buy else resting.order_id,
+                    sell_order_id = resting.order_id if buy else order.order_id,
+                    price         = price,          # passive side's price
+                    quantity      = fill,
                 ))
+                remaining -= fill
+                resting.filled_qty += fill
 
-                remaining_qty -= fill_qty
-
-                if fully_filled:
-                    # Removing the node subtracts the order's remaining
-                    # quantity from total_qty. Subtracting it here as well
-                    # would count the fill twice.
-                    ask_level.remove_specific(ask_order.order_id)
-                    book.order_map.pop(ask_order.order_id, None)
+                if fill == resting.quantity:
+                    # remove_node subtracts the order's open quantity from
+                    # total_qty, so don't subtract it here as well.
+                    level.remove_node(node)
+                    book.order_map.pop(resting.order_id, None)
+                    resting.quantity = 0
+                    resting.status = 'COMPLETE'
                 else:
-                    ask_order.quantity  -= fill_qty
-                    ask_level.total_qty -= fill_qty
+                    resting.quantity -= fill
+                    level.total_qty  -= fill
+                node = nxt
 
-                if ask_level.is_empty():
-                    del book.asks[best_ask]
+            if level.is_empty():
+                del opposite[price]      # next level slides into this index
+            else:
+                idx += 1                 # only own orders (or none) left here
 
-        else:  # SELL
-            # Walk down bids from highest price
-            while remaining_qty > 0 and book.best_bid() is not None:
-                best_bid  = book.best_bid()
-                if best_bid < order.price:
-                    break
+        order.filled_qty += order.quantity - remaining
+        order.quantity = remaining
 
-                bid_level  = book.bids[best_bid]
-                bid_order  = bid_level.peek_front()
-
-                # Self-trade prevention, same rule as the BUY side.
-                if (order.trader_id is not None
-                        and bid_order.trader_id is not None
-                        and order.trader_id == bid_order.trader_id):
-                    next_order = self._peek_after(bid_level, bid_order)
-                    if next_order is None:
-                        break
-                    bid_order = next_order
-
-                fill_qty   = min(remaining_qty, bid_order.quantity)
-                fully_filled = fill_qty == bid_order.quantity
-
-                trades.append(Trade(
-                    trade_id      = str(uuid.uuid4())[:8].upper(),
-                    symbol        = order.symbol,
-                    buy_order_id  = bid_order.order_id,
-                    sell_order_id = order.order_id,
-                    price         = best_bid,
-                    quantity      = fill_qty,
-                ))
-
-                remaining_qty -= fill_qty
-
-                if fully_filled:
-                    bid_level.remove_specific(bid_order.order_id)
-                    book.order_map.pop(bid_order.order_id, None)
-                else:
-                    bid_order.quantity  -= fill_qty
-                    bid_level.total_qty -= fill_qty
-
-                if bid_level.is_empty():
-                    del book.bids[best_bid]
-
-        # LIMIT: unfilled quantity rests in the book.
-        # MARKET: unfilled quantity is dropped (rest_unfilled=False).
-        if remaining_qty > 0 and rest_unfilled:
-            order.quantity = remaining_qty
-            book.add_passive(order)
-        elif remaining_qty > 0:
-            # Not enough liquidity for the market order. Leave the unfilled
-            # quantity on the order so the caller can see it.
-            order.quantity = remaining_qty
-
+        if remaining == 0:
+            order.status = 'COMPLETE'
+        elif not rest_unfilled:
+            order.status = 'CANCELLED'
+            order.message = ('No liquidity, order cancelled' if order.filled_qty == 0
+                             else f'{remaining} unfilled, cancelled (IOC)')
+        else:
+            best = book.best_ask() if buy else book.best_bid()
+            if best is not None and ((buy and best <= order.price) or
+                                     (not buy and best >= order.price)):
+                order.status = 'CANCELLED'
+                order.message = (f'{remaining} cancelled by self-trade prevention '
+                                 f'(would cross your own order)')
+            else:
+                book.add_passive(order)
+                order.status = 'OPEN'
         return trades
 
     # ── market order matching ────────────────────────────────
