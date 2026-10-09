@@ -4,8 +4,7 @@ A limit order book and matching engine in Python, with a paper-trading broker an
 
 **Mahendra Meena | IIIT Gwalior | B.Tech EEE 2027**
 
-**Live demo:** [your-app.onrender.com](https://your-app.onrender.com) *(replace with your Render URL after deploying)*
-
+**Live demo:** https://nexus-trade-network-exchange-unified.onrender.com
 ---
 
 I wanted to know what happens between clicking "Buy" and getting a fill. I don't mean the trading side. I mean the exchange software that does the matching. This project is my answer.
